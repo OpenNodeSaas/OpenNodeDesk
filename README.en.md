@@ -1,8 +1,10 @@
-# RemotePilot
+# OpenNode Desk
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-RemotePilot is a free, portable, offline-first remote operations client for Windows built on WPF (.NET).
+OpenNode Desk is a free, portable, offline-first remote operations client for Windows built on WPF (.NET).
+
+> Formerly RemotePilot, renamed on 2026-11-14. Release packages up to v2.3.0 are still named `RemotePilot-*.zip` and run as `RemotePilot.exe`; later releases will use the new name.
 
 - **Native RDP**: Generates `.rdp` files on the fly and connects through the system-provided `mstsc.exe` — no third-party proxy involved.
 - **Built-in SSH terminal**: Powered by SSH.NET and VirtualTerminal.WPF, with SSH jump host support.
