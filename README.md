@@ -1,8 +1,10 @@
-# RemotePilot
+# OpenNode Desk
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-RemotePilot 是一款面向 Windows 运维人员的免费、绿色、离线优先的远程运维客户端，基于 WPF（.NET）构建。
+OpenNode Desk 是一款面向 Windows 运维人员的免费、绿色、离线优先的远程运维客户端，基于 WPF（.NET）构建。
+
+> 前身为 RemotePilot，2026-11-14 改名。v2.3.0 及更早发布包的文件名仍是 `RemotePilot-*.zip`，解压后运行的程序仍是 `RemotePilot.exe`；改名后的发版将统一改名。
 
 - **RDP 直连**：动态生成 `.rdp` 文件，通过系统自带 `mstsc.exe` 连接，不经过任何第三方代理。
 - **内置 SSH 终端**：基于 SSH.NET 与 VirtualTerminal.WPF，支持 SSH 跳板机。
