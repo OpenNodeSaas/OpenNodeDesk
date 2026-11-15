@@ -33,6 +33,16 @@ public partial class SessionCellControl : UserControl
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(FocusTerminal));
             }
         };
+
+        // 布局重建会丢弃旧单元格；离树时解除对 VM 的订阅，否则 VM 会长期持有已丢弃的控件及其视觉树
+        Unloaded += (s, e) =>
+        {
+            if (_viewModel != null)
+            {
+                _viewModel.PropertyChanged -= Vm_PropertyChanged;
+                _viewModel = null;
+            }
+        };
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)

@@ -330,7 +330,8 @@ public partial class MainWindow : Window
         _probe.ProbeCompleted += OnProbeCompleted;
 
         GridAssets.ItemsSource = _viewAssets;
-        ItemsCardsGrid.ItemsSource = _viewAssets;
+        // 卡片面板（WrapPanel）不虚拟化，改为仅在卡片视图可见时绑定，避免切过一次后所有卡片容器常驻内存
+        ItemsCardsGrid.ItemsSource = null;
 
         // 恢复资产列表的列显隐 / 顺序 / 字号偏好
         ApplyAssetListPreferences();
@@ -416,6 +417,13 @@ public partial class MainWindow : Window
         };
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        // 周期探测定时器持有资产列表与存储的闭包，窗口关闭时显式停掉，避免其继续占用线程与内存
+        _probe.StopPeriodicProbe();
+        base.OnClosed(e);
+    }
+
     /// <summary>全屏只保留会话工作台：左侧导航、顶部三栏、右侧详情面板全部隐藏，退出时精确恢复原始状态。</summary>
     private void ToggleWorkspaceFullscreen()
     {
@@ -428,6 +436,7 @@ public partial class MainWindow : Window
             _navMode = NavMode.Sessions;
             GridAssets.Visibility = Visibility.Collapsed;
             ScrollCardsArea.Visibility = Visibility.Collapsed;
+            ItemsCardsGrid.ItemsSource = null;
             SessionWorkspace.Visibility = Visibility.Visible;
             UpdateNavSelection();
 
@@ -836,6 +845,8 @@ public partial class MainWindow : Window
         TemplateManagement.Visibility = Visibility.Collapsed;
         GridAssets.Visibility = gridView ? Visibility.Collapsed : Visibility.Visible;
         ScrollCardsArea.Visibility = gridView ? Visibility.Visible : Visibility.Collapsed;
+        // 卡片面板不虚拟化：只在卡片视图可见时挂数据源，切回列表即摘除，释放已生成的卡片容器
+        ItemsCardsGrid.ItemsSource = gridView ? _viewAssets : null;
 
         BtnViewTable.Background = (SolidColorBrush)Application.Current.Resources[gridView ? "SurfaceBackground" : "Primary"];
         BtnViewTable.Foreground = gridView ? (Brush)Application.Current.Resources["AppForeground"] : Brushes.White;
@@ -930,6 +941,7 @@ public partial class MainWindow : Window
         _navMode = NavMode.Sessions;
         GridAssets.Visibility = Visibility.Collapsed;
         ScrollCardsArea.Visibility = Visibility.Collapsed;
+        ItemsCardsGrid.ItemsSource = null;
         HelpManual.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
         TemplateManagement.Visibility = Visibility.Collapsed;
