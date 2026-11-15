@@ -2,11 +2,11 @@
 
 # 以脚本位置推算 desktop 根目录，保证任意工作目录执行都正确
 $root = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $root "src\RemotePilot\RemotePilot.csproj"
+$projectPath = Join-Path $root "src\OpenNodeDesk\OpenNodeDesk.csproj"
 $publishDir  = Join-Path $root "artifacts\publish"          # 目录版
 $singleDir   = Join-Path $root "artifacts\publish_single"   # 单文件版
-$zipFile       = Join-Path $root "artifacts\RemotePilot-win-x64.zip"
-$singleZipFile = Join-Path $root "artifacts\RemotePilot-single-win-x64.zip"
+$zipFile       = Join-Path $root "artifacts\OpenNodeDesk-win-x64.zip"
+$singleZipFile = Join-Path $root "artifacts\OpenNodeDesk-single-win-x64.zip"
 
 Write-Host "发布项目: $projectPath"
 foreach ($dir in @($publishDir, $singleDir)) {
@@ -37,5 +37,5 @@ Compress-Archive -Path (Join-Path $singleDir "*") -DestinationPath $singleZipFil
 
 Write-Host "完成！"
 Write-Host "  目录版 ZIP : $zipFile"
-Write-Host "  单文件 exe : $(Join-Path $singleDir 'RemotePilot.exe')"
+Write-Host "  单文件 exe : $(Join-Path $singleDir 'OpenNodeDesk.exe')"
 Write-Host "  单文件 ZIP : $singleZipFile"

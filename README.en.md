@@ -1,10 +1,10 @@
-# OpenNode Desk
+# OpenNodeDesk
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-OpenNode Desk is a free, portable, offline-first remote operations client for Windows built on WPF (.NET).
+OpenNodeDesk is a free, portable, offline-first remote operations client for Windows built on WPF (.NET).
 
-> Formerly RemotePilot, renamed on 2026-11-14. Release packages up to v2.3.0 are still named `RemotePilot-*.zip` and run as `RemotePilot.exe`; later releases will use the new name.
+> Formerly RemotePilot, renamed on 2026-11-14. Release packages up to v2.3.0 are still named `RemotePilot-*.zip` and run as `RemotePilot.exe`; releases from this version on use the new name.
 
 - **Native RDP**: Generates `.rdp` files on the fly and connects through the system-provided `mstsc.exe` — no third-party proxy involved.
 - **Built-in SSH terminal**: Powered by SSH.NET and VirtualTerminal.WPF, with SSH jump host support.
@@ -15,15 +15,15 @@ OpenNode Desk is a free, portable, offline-first remote operations client for Wi
 ## Requirements
 
 - Windows 10 / 11 (x64)
-- Release builds are self-contained and require no separate .NET runtime; unzip and run `RemotePilot.exe` directly.
+- Release builds are self-contained and require no separate .NET runtime; unzip and run `OpenNodeDesk.exe` directly.
 
 ## Build
 
 Requires [.NET SDK 10](https://dotnet.microsoft.com/download).
 
 ```powershell
-dotnet build src\RemotePilot\RemotePilot.csproj -c Release
-dotnet test tests\RemotePilot.Tests
+dotnet build src\OpenNodeDesk\OpenNodeDesk.csproj -c Release
+dotnet test tests\OpenNodeDesk.Tests
 ```
 
 ## Data & Security

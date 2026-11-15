@@ -1,10 +1,10 @@
-# OpenNode Desk
+# OpenNodeDesk
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-OpenNode Desk 是一款面向 Windows 运维人员的免费、绿色、离线优先的远程运维客户端，基于 WPF（.NET）构建。
+OpenNodeDesk 是一款面向 Windows 运维人员的免费、绿色、离线优先的远程运维客户端，基于 WPF（.NET）构建。
 
-> 前身为 RemotePilot，2026-11-14 改名。v2.3.0 及更早发布包的文件名仍是 `RemotePilot-*.zip`，解压后运行的程序仍是 `RemotePilot.exe`；改名后的发版将统一改名。
+> 前身为 RemotePilot，2026-11-14 改名。v2.3.0 及更早发布包的文件名仍是 `RemotePilot-*.zip`，解压后运行的程序仍是 `RemotePilot.exe`；本版本起统一改名为 OpenNodeDesk。
 
 - **RDP 直连**：动态生成 `.rdp` 文件，通过系统自带 `mstsc.exe` 连接，不经过任何第三方代理。
 - **内置 SSH 终端**：基于 SSH.NET 与 VirtualTerminal.WPF，支持 SSH 跳板机。
@@ -15,15 +15,15 @@ OpenNode Desk 是一款面向 Windows 运维人员的免费、绿色、离线优
 ## 运行要求
 
 - Windows 10 / 11（x64）
-- 发布包为 self-contained，无需另装 .NET 运行时；解压后直接运行 `RemotePilot.exe`
+- 发布包为 self-contained，无需另装 .NET 运行时；解压后直接运行 `OpenNodeDesk.exe`
 
 ## 构建
 
 需要 [.NET SDK 10](https://dotnet.microsoft.com/download)。
 
 ```powershell
-dotnet build src\RemotePilot\RemotePilot.csproj -c Release
-dotnet test tests\RemotePilot.Tests
+dotnet build src\OpenNodeDesk\OpenNodeDesk.csproj -c Release
+dotnet test tests\OpenNodeDesk.Tests
 ```
 
 ## 数据与安全

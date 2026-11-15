@@ -38,7 +38,7 @@ jobs:
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           gh release create "$env:TAG" `
-            artifacts/RemotePilot-win-x64.zip `
-            artifacts/RemotePilot-single-win-x64.zip `
+            artifacts/OpenNodeDesk-win-x64.zip `
+            artifacts/OpenNodeDesk-single-win-x64.zip `
             --title "$env:TAG" `
             --generate-notes

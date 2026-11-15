@@ -34,11 +34,11 @@ jobs:
         with:
           dotnet-version: "10.0.x"
       - name: Publish (win-x64, self-contained)
-        run: dotnet publish src/RemotePilot/RemotePilot.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish
+        run: dotnet publish src/OpenNodeDesk/OpenNodeDesk.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish
       - name: Upload unsigned artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RemotePilot-win-x64-unsigned
+          name: OpenNodeDesk-win-x64-unsigned
           path: artifacts/publish
 
   sign:
@@ -56,5 +56,5 @@ jobs:
           # TODO (after approval): confirm the signing-policy slug and
           # artifact reference in the SignPath project settings before enabling.
           signing-policy-slug: release-signing
-          github-artifact-id: RemotePilot-win-x64-unsigned
+          github-artifact-id: OpenNodeDesk-win-x64-unsigned
           wait-for-completion: true
