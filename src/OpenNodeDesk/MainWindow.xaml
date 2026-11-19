@@ -304,6 +304,11 @@
                           SelectionChanged="GridAssets_SelectionChanged"
                           AlternationCount="2"
                           GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderBrush}">
+                    <DataGrid.Resources>
+                        <!-- 屏蔽 App 级 TextBlock 默认 14px 的隐式样式：让列表内所有文本（IP:端口、状态、操作等模板列）
+                             统一回落到从 DataGrid 继承的「字号档位」 -->
+                        <Style TargetType="TextBlock"/>
+                    </DataGrid.Resources>
                     <DataGrid.Columns>
                         <DataGridTemplateColumn x:Name="ColFavorite" Header="{Binding [Col_Favorite], Source={x:Static svc:LocalizationManager.Instance}}" Width="36" SortMemberPath="IsFavorite">
                             <DataGridTemplateColumn.CellTemplate>
