@@ -1,5 +1,6 @@
 ﻿using System.Configuration;
 using System.Data;
+using System.Diagnostics;
 using System.Threading;
 using System.Windows;
 using OpenNodeDesk.Services;
@@ -19,6 +20,9 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _activateEvent;
     private RegisteredWaitHandle? _activateWait;
+
+    /// <summary>退出后是否需要重新启动自身（用于「清空数据并进入」）。</summary>
+    public static bool RestartOnExit { get; set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -95,5 +99,19 @@ public partial class App : Application
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);
+
+        if (!RestartOnExit) return;
+        try
+        {
+            if (Environment.ProcessPath is { } exePath)
+            {
+                Process.Start(new ProcessStartInfo { FileName = exePath, UseShellExecute = true });
+                RestartOnExit = false;
+            }
+        }
+        catch
+        {
+            // 重启失败时不再抛异常，避免影响退出流程
+        }
     }
 }

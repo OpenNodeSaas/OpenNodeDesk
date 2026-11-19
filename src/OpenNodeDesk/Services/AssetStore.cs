@@ -34,6 +34,19 @@ public sealed record AssetStoreData
     public bool SshStandaloneWindow { get; init; }
     public double SshTerminalFontSize { get; init; } = 13;
     public int SshTerminalScheme { get; init; }
+
+    // 保护口令（仅本机）：是否启用、空闲锁定分钟数、PBKDF2 盐与哈希（Base64）
+    public bool ProtectionEnabled { get; init; }
+    public int ProtectionIdleMinutes { get; init; } = 10;
+    public string ProtectionSalt { get; init; } = "";
+    public string ProtectionHash { get; init; } = "";
+
+    // 恢复口令：忘记保护口令时用于重置，同样只存 PBKDF2 盐与哈希（Base64）
+    public string ProtectionRecoverySalt { get; init; } = "";
+    public string ProtectionRecoveryHash { get; init; } = "";
+
+    // 口令与恢复口令都失效时，是否允许在锁定界面清空本地数据（由用户在设置页选择）
+    public bool ProtectionAllowDataWipe { get; init; } = true;
 }
 
 public sealed class AssetStore
@@ -155,7 +168,14 @@ public sealed class AssetStore
                 AssetListFontSize = (data.AssetListFontSize >= 10 && data.AssetListFontSize <= 24) ? data.AssetListFontSize : 14,
                 SshStandaloneWindow = data.SshStandaloneWindow,
                 SshTerminalFontSize = (data.SshTerminalFontSize >= 9 && data.SshTerminalFontSize <= 28) ? data.SshTerminalFontSize : 13,
-                SshTerminalScheme = (data.SshTerminalScheme >= 0 && data.SshTerminalScheme <= 2) ? data.SshTerminalScheme : 0
+                SshTerminalScheme = (data.SshTerminalScheme >= 0 && data.SshTerminalScheme <= 2) ? data.SshTerminalScheme : 0,
+                ProtectionEnabled = data.ProtectionEnabled && !string.IsNullOrWhiteSpace(data.ProtectionSalt) && !string.IsNullOrWhiteSpace(data.ProtectionHash),
+                ProtectionIdleMinutes = (data.ProtectionIdleMinutes is 1 or 5 or 10 or 15 or 30 or 60) ? data.ProtectionIdleMinutes : 10,
+                ProtectionSalt = data.ProtectionSalt ?? "",
+                ProtectionHash = data.ProtectionHash ?? "",
+                ProtectionRecoverySalt = data.ProtectionRecoverySalt ?? "",
+                ProtectionRecoveryHash = data.ProtectionRecoveryHash ?? "",
+                ProtectionAllowDataWipe = data.ProtectionAllowDataWipe
             };
         }
         catch

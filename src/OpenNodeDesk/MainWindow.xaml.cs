@@ -5,12 +5,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Threading;
 using OpenNodeDesk.Models;
 using OpenNodeDesk.Controls;
 using OpenNodeDesk.Services;
@@ -213,6 +216,13 @@ public partial class MainWindow : Window
     private bool _clipboardHintShown;
     /// <summary>用户本次运行是否勾选过顶栏「剪贴板」；仅勾选后才需要展示该提示。</summary>
     private bool _clipboardHintArmed;
+    private const int MaxUnlockAttempts = 5;
+    private int _unlockFailures;
+    private int _recoveryFailures;
+    private bool _isLocked;
+    private bool _protectionEnabled;
+    private int _protectionIdleMinutes = 10;
+    private DispatcherTimer? _protectionIdleTimer;
 
     /// <summary>已就认证失败弹过一次凭据补录的资产，避免同一会话反复弹窗（每个资产仅提示一次）。</summary>
     private readonly HashSet<Guid> _authRetryPrompted = [];
@@ -307,6 +317,19 @@ public partial class MainWindow : Window
     public const string ResFontSizeNormal = "FontSize_Normal";
     public const string ResFontSizeLarge = "FontSize_Large";
     public const string ResFontSizeXLarge = "FontSize_XLarge";
+    public const string ResLockTitle = "Lock_Title";
+    public const string ResLockSubtitle = "Lock_Subtitle";
+    public const string ResLockUnlock = "Lock_BtnUnlock";
+    public const string ResLockDestroy = "Lock_BtnDestroy";
+    public const string ResLockDestroyMessage = "Lock_DestroyMessage";
+    public const string ResLockWipeNotAllowed = "Lock_WipeNotAllowed";
+    public const string ResLockForgot = "Lock_BtnForgot";
+    public const string ResLockRecoveryDesc = "Lock_RecoveryDesc";
+    public const string ResLockRecoveryCode = "Lock_RecoveryCodeLabel";
+    public const string ResLockRecoveryNew = "Lock_RecoveryNewLabel";
+    public const string ResLockRecoveryConfirm = "Lock_RecoveryConfirmLabel";
+    public const string ResLockBtnReset = "Lock_BtnReset";
+    public const string ResLockBtnBack = "Lock_BtnBack";
 
     private static LocalizationManager L10n => LocalizationManager.Instance;
 
@@ -357,6 +380,8 @@ public partial class MainWindow : Window
 
         LoadAssetsFromStore();
         UpdateNavSelection();
+        StartProtectionIdleTimer();
+        if (_protectionEnabled) EnterLock();
 
         // 绑定抽屉回调与工作台事件
         SettingsDrawer.Applied += (updatedAsset) =>
@@ -396,7 +421,7 @@ public partial class MainWindow : Window
         SessionWorkspace.RequestFullscreenToggle += ToggleWorkspaceFullscreen;
         SessionWorkspace.SessionConnectFailed += OnSessionConnectFailed;
 
-        // 设置页保存：VNC 客户端 + SSH 终端外观，写入内存后同步到工作台/新会话并落盘
+        // 设置页保存：VNC 客户端 + SSH 终端外观 + 保护口令，写入内存后同步到工作台/新会话并落盘
         SettingsView.Saved += () =>
         {
             _vncViewerPath = SettingsView.VncViewerPath;
@@ -406,17 +431,62 @@ public partial class MainWindow : Window
 
             SshTerminalView.SetDefaults(SettingsView.SshFontSize, SettingsView.SshSchemeIndex);
 
+            var enabled = SettingsView.ProtectionEnabled;
+            var idleMinutes = SettingsView.ProtectionIdleMinutes;
+            var newPassword = SettingsView.NewPassword;
+
             var data = _assetStore.Load();
+            var salt = data.ProtectionSalt;
+            var hash = data.ProtectionHash;
+            var recoverySalt = data.ProtectionRecoverySalt;
+            var recoveryHash = data.ProtectionRecoveryHash;
+            if (!enabled)
+            {
+                // 关闭保护：清空口令与恢复口令材料
+                salt = "";
+                hash = "";
+                recoverySalt = "";
+                recoveryHash = "";
+            }
+            else if (!string.IsNullOrWhiteSpace(newPassword))
+            {
+                (salt, hash) = ProtectionHasher.Create(newPassword.Trim());
+                (recoverySalt, recoveryHash) =
+                    ProtectionHasher.Create(ProtectionHasher.NormalizeRecoveryCode(SettingsView.RecoveryCode));
+            }
+
+            _protectionEnabled = enabled;
+            _protectionIdleMinutes = idleMinutes;
+
             _assetStore.Save(data with
             {
                 VncViewerPath = _vncViewerPath,
                 VncArgumentTemplate = _vncArgumentTemplate,
                 SshTerminalFontSize = SettingsView.SshFontSize,
                 SshTerminalScheme = SettingsView.SshSchemeIndex,
-                SshStandaloneWindow = SettingsView.SshStandaloneWindow
+                SshStandaloneWindow = SettingsView.SshStandaloneWindow,
+                ProtectionEnabled = enabled,
+                ProtectionIdleMinutes = idleMinutes,
+                ProtectionSalt = salt,
+                ProtectionHash = hash,
+                ProtectionRecoverySalt = recoverySalt,
+                ProtectionRecoveryHash = recoveryHash,
+                ProtectionAllowDataWipe = SettingsView.ProtectionAllowDataWipe
             });
 
-            MessageBox.Show(L10n["Settings_Saved"], L10n["Msg_Tip"], MessageBoxButton.OK, MessageBoxImage.Information);
+            StartProtectionIdleTimer();
+            if (!enabled && _isLocked) ExitLock();
+
+            if (!SettingsView.IsLockPending)
+            {
+                MessageBox.Show(L10n["Settings_Saved"], L10n["Msg_Tip"], MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        };
+
+        // 设置页「立即锁定」：Saved 已先落盘，这里直接进入锁定态
+        SettingsView.LockRequested += () =>
+        {
+            if (_protectionEnabled) EnterLock();
         };
     }
 
@@ -424,6 +494,7 @@ public partial class MainWindow : Window
     {
         // 周期探测定时器持有资产列表与存储的闭包，窗口关闭时显式停掉，避免其继续占用线程与内存
         _probe.StopPeriodicProbe();
+        _protectionIdleTimer?.Stop();
         base.OnClosed(e);
     }
 
@@ -1036,10 +1107,13 @@ public partial class MainWindow : Window
         _vncViewerPath = data.VncViewerPath;
         _vncArgumentTemplate = data.VncArgumentTemplate;
         _sshStandaloneWindow = data.SshStandaloneWindow;
+        _protectionEnabled = data.ProtectionEnabled;
+        _protectionIdleMinutes = data.ProtectionIdleMinutes;
         ApplyVncSettings();
 
         // 回填设置页，并让持久化的 SSH 终端外观立即对新会话生效
-        SettingsView.LoadSettings(_vncViewerPath, _vncArgumentTemplate, data.SshTerminalFontSize, data.SshTerminalScheme, data.SshStandaloneWindow);
+        SettingsView.LoadSettings(_vncViewerPath, _vncArgumentTemplate, data.SshTerminalFontSize, data.SshTerminalScheme, data.SshStandaloneWindow,
+            data.ProtectionEnabled, data.ProtectionIdleMinutes, !string.IsNullOrWhiteSpace(data.ProtectionHash), data.ProtectionAllowDataWipe);
         SshTerminalView.SetDefaults(data.SshTerminalFontSize, data.SshTerminalScheme);
         _suppressRememberToggle = true;
         ChkRememberPassword.IsChecked = _rememberPassword;
@@ -2406,5 +2480,287 @@ public partial class MainWindow : Window
         var isVnc = protocol.Equals("vnc", StringComparison.OrdinalIgnoreCase);
         PanelRdpResolution.Visibility = isSsh || isVnc ? Visibility.Collapsed : Visibility.Visible;
         PanelSshWindowSize.Visibility = isSsh ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>启动/更新空闲锁定计时器：仅启用保护口令时运行。</summary>
+    private void StartProtectionIdleTimer()
+    {
+        if (!_protectionEnabled)
+        {
+            _protectionIdleTimer?.Stop();
+            return;
+        }
+
+        _protectionIdleTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _protectionIdleTimer.Tick -= OnProtectionIdleTick;
+        _protectionIdleTimer.Tick += OnProtectionIdleTick;
+        _protectionIdleTimer.Start();
+    }
+
+    private void OnProtectionIdleTick(object? sender, EventArgs e)
+    {
+        if (_isLocked || !_protectionEnabled) return;
+
+        // 有可见子窗口（模态对话框、独立 SSH 窗口）时用户可能正在操作，跳过本次判断
+        if (OwnedWindows.Cast<Window>().Any(w => w.IsVisible)) return;
+
+        if (GetIdleDuration() >= TimeSpan.FromMinutes(_protectionIdleMinutes))
+        {
+            EnterLock();
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    /// <summary>系统级空闲时长（含窗口在后台时的键鼠输入）。</summary>
+    private static TimeSpan GetIdleDuration()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info)) return TimeSpan.Zero;
+
+        uint idleMs = unchecked((uint)Environment.TickCount) - info.dwTime;
+        return TimeSpan.FromMilliseconds(idleMs);
+    }
+
+    private void EnterLock()
+    {
+        if (_isLocked) return;
+
+        // 锁定前关闭所有已打开的子窗口，避免绕过覆盖层继续操作
+        foreach (var w in OwnedWindows.Cast<Window>().Where(x => x.IsVisible).ToList())
+        {
+            w.Close();
+        }
+
+        _unlockFailures = 0;
+        _recoveryFailures = 0;
+        _isLocked = true;
+        ApplyLockBlur(true);
+        GridLockOverlay.Visibility = Visibility.Visible;
+        PwdUnlock.Clear();
+        ResetRecoveryPanel();
+        HideLockError();
+        UpdateLockUiForFailures();
+        PwdUnlock.Focus();
+    }
+
+    private void ExitLock()
+    {
+        _isLocked = false;
+        GridLockOverlay.Visibility = Visibility.Collapsed;
+        ApplyLockBlur(false);
+        _unlockFailures = 0;
+        _recoveryFailures = 0;
+        PwdUnlock.Clear();
+        ResetRecoveryPanel();
+        HideLockError();
+        UpdateLockUiForFailures();
+    }
+
+    private void HideLockError()
+    {
+        TxtLockError.Visibility = Visibility.Collapsed;
+        TxtRecoveryError.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowLockError(string message)
+    {
+        TxtLockError.Text = message;
+        TxtLockError.Visibility = Visibility.Visible;
+        TxtRecoveryError.Text = message;
+        TxtRecoveryError.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>锁定期间模糊底层内容，避免隔着半透明遮罩读到资产信息。</summary>
+    private void ApplyLockBlur(bool locked)
+    {
+        var effect = locked
+            ? new BlurEffect { Radius = 12, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Performance }
+            : null;
+        BorderLeftNav.Effect = effect;
+        RootMain.Effect = effect;
+        BorderRightPanel.Effect = effect;
+    }
+
+    /// <summary>锁定界面回到口令输入模式，并清空恢复口令相关输入。</summary>
+    private void ResetRecoveryPanel()
+    {
+        PanelLockRecovery.Visibility = Visibility.Collapsed;
+        PanelLockNormal.Visibility = Visibility.Visible;
+        TxtRecoveryInput.Clear();
+        PwdRecoveryNew.Clear();
+        PwdRecoveryConfirm.Clear();
+    }
+
+    private void UpdateLockUiForFailures()
+    {
+        var data = _assetStore.Load();
+        var hasRecoveryCode = !string.IsNullOrWhiteSpace(data.ProtectionRecoverySalt)
+            && !string.IsNullOrWhiteSpace(data.ProtectionRecoveryHash);
+
+        var passwordLocked = _unlockFailures >= MaxUnlockAttempts;
+        var recoveryLocked = _recoveryFailures >= MaxUnlockAttempts || !hasRecoveryCode;
+
+        // 口令错满 5 次只停用口令输入，恢复口令仍可使用；恢复口令也失效后才允许清空数据
+        PwdUnlock.IsEnabled = !passwordLocked;
+        BtnUnlock.IsEnabled = !passwordLocked;
+        BtnForgot.IsEnabled = _recoveryFailures < MaxUnlockAttempts;
+
+        var wipeAvailable = passwordLocked && recoveryLocked && data.ProtectionAllowDataWipe;
+        BtnDestroyData.Visibility = wipeAvailable ? Visibility.Visible : Visibility.Collapsed;
+        TxtLockDestroyHint.Visibility = wipeAvailable ? Visibility.Visible : Visibility.Collapsed;
+        TxtLockWipeNotAllowed.Visibility = passwordLocked && recoveryLocked && !data.ProtectionAllowDataWipe
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void BtnUnlock_Click(object sender, RoutedEventArgs e) => TryUnlock();
+
+    private void PwdUnlock_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            TryUnlock();
+            e.Handled = true;
+        }
+    }
+
+    private void TryUnlock()
+    {
+        if (!_isLocked || _unlockFailures >= MaxUnlockAttempts) return;
+
+        var data = _assetStore.Load();
+        if (data.ProtectionEnabled && ProtectionHasher.Verify(PwdUnlock.Password, data.ProtectionSalt, data.ProtectionHash))
+        {
+            ExitLock();
+            return;
+        }
+
+        _unlockFailures++;
+        PwdUnlock.Clear();
+        UpdateLockUiForFailures();
+        if (_unlockFailures >= MaxUnlockAttempts)
+        {
+            ShowLockError(L10n["Lock_PasswordLockedOut"]);
+        }
+        else
+        {
+            ShowLockError(L10n.Format("Lock_WrongPassword", MaxUnlockAttempts - _unlockFailures));
+            PwdUnlock.Focus();
+        }
+    }
+
+    private void BtnForgot_Click(object sender, RoutedEventArgs e)
+    {
+        var data = _assetStore.Load();
+        if (string.IsNullOrWhiteSpace(data.ProtectionRecoverySalt) || string.IsNullOrWhiteSpace(data.ProtectionRecoveryHash))
+        {
+            MessageBox.Show(this, L10n["Lock_RecoveryNoCode"], L10n["Msg_Tip"],
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        HideLockError();
+        PanelLockNormal.Visibility = Visibility.Collapsed;
+        PanelLockRecovery.Visibility = Visibility.Visible;
+        TxtRecoveryInput.Clear();
+        PwdRecoveryNew.Clear();
+        PwdRecoveryConfirm.Clear();
+        TxtRecoveryInput.Focus();
+    }
+
+    private void BtnRecoveryBack_Click(object sender, RoutedEventArgs e)
+    {
+        ResetRecoveryPanel();
+        HideLockError();
+        PwdUnlock.Focus();
+    }
+
+    private void BtnResetPassphrase_Click(object sender, RoutedEventArgs e) => TryResetPassphrase();
+
+    private void TxtRecoveryInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            TryResetPassphrase();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>凭恢复口令重置保护口令：校验恢复口令后写入新口令的盐/哈希并解锁。</summary>
+    private void TryResetPassphrase()
+    {
+        if (!_isLocked) return;
+
+        var data = _assetStore.Load();
+        if (!ProtectionHasher.VerifyRecovery(TxtRecoveryInput.Text, data.ProtectionRecoverySalt, data.ProtectionRecoveryHash))
+        {
+            _recoveryFailures++;
+            TxtRecoveryInput.Clear();
+            UpdateLockUiForFailures();
+            if (_recoveryFailures >= MaxUnlockAttempts)
+            {
+                // 恢复口令也错满 5 次：退回口令面板，仅保留（设置允许时的）清空数据入口
+                ResetRecoveryPanel();
+                ShowLockError(L10n["Lock_RecoveryLockedOut"]);
+                return;
+            }
+
+            ShowLockError(L10n.Format("Lock_RecoveryWrong", MaxUnlockAttempts - _recoveryFailures));
+            TxtRecoveryInput.Focus();
+            return;
+        }
+
+        var newPassword = PwdRecoveryNew.Password.Trim();
+        if (newPassword.Length < 4)
+        {
+            ShowLockError(L10n["Lock_RecoveryPasswordRequired"]);
+            return;
+        }
+
+        if (newPassword != PwdRecoveryConfirm.Password)
+        {
+            ShowLockError(L10n["Lock_RecoveryPasswordMismatch"]);
+            return;
+        }
+
+        var (salt, hash) = ProtectionHasher.Create(newPassword);
+        _assetStore.Save(data with { ProtectionSalt = salt, ProtectionHash = hash });
+
+        ExitLock();
+        MessageBox.Show(this, L10n["Lock_RecoverySuccess"], L10n["Msg_Tip"],
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnDestroyData_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = MessageBox.Show(this, L10n["Lock_DestroyConfirm"], L10n["Msg_Tip"],
+            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        try
+        {
+            if (File.Exists(_assetStore.FilePath))
+            {
+                File.Delete(_assetStore.FilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, L10n["Msg_Tip"], MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        // 释放单实例互斥体后由 App.OnExit 重新拉起进程，避免新进程被判为第二实例
+        App.RestartOnExit = true;
+        Application.Current.Shutdown();
     }
 }

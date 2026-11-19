@@ -185,7 +185,7 @@
         </Border>
 
         <!-- 中央主工作区 -->
-        <Grid Grid.Column="1">
+        <Grid x:Name="RootMain" Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition x:Name="RowTopCommand" Height="56"/>
                 <RowDefinition x:Name="RowTopSettings" Height="Auto"/>
@@ -304,11 +304,6 @@
                           SelectionChanged="GridAssets_SelectionChanged"
                           AlternationCount="2"
                           GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderBrush}">
-                    <DataGrid.Resources>
-                        <!-- 屏蔽 App 级 TextBlock 默认 14px 的隐式样式：让列表内所有文本（IP:端口、状态、操作等模板列）
-                             统一回落到从 DataGrid 继承的「字号档位」 -->
-                        <Style TargetType="TextBlock"/>
-                    </DataGrid.Resources>
                     <DataGrid.Columns>
                         <DataGridTemplateColumn x:Name="ColFavorite" Header="{Binding [Col_Favorite], Source={x:Static svc:LocalizationManager.Instance}}" Width="36" SortMemberPath="IsFavorite">
                             <DataGridTemplateColumn.CellTemplate>
@@ -343,7 +338,7 @@
                         <DataGridTemplateColumn x:Name="ColIpPort" Header="{Binding [Col_IpPort], Source={x:Static svc:LocalizationManager.Instance}}" Width="160" SortMemberPath="IpPortDisplay">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding IpPortDisplay}" Foreground="{DynamicResource MutedForeground}" VerticalAlignment="Center" Margin="2,0"/>
+                                    <TextBlock Text="{Binding IpPortDisplay}" FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}" Foreground="{DynamicResource MutedForeground}" VerticalAlignment="Center" Margin="2,0"/>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
@@ -356,7 +351,7 @@
                                 <DataTemplate>
                                     <Border Background="{Binding StatusBadgeBackground}" CornerRadius="3" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center"
                                             ToolTip="{Binding [Tip_StatusNotProbed], Source={x:Static svc:LocalizationManager.Instance}}">
-                                        <TextBlock Text="{Binding StatusDisplay}" Foreground="{Binding StatusBadgeForeground}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding StatusDisplay}" FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}" Foreground="{Binding StatusBadgeForeground}" FontWeight="SemiBold"/>
                                     </Border>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -376,6 +371,7 @@
                                             Tag="{Binding}"
                                             Click="BtnTemplateName_Click"
                                             Style="{StaticResource {x:Static ToolBar.ButtonStyleKey}}"
+                                            FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Padding="4,2"
@@ -385,6 +381,7 @@
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
                                                 <TextBlock Text="{TemplateBinding Content}"
+                                                          FontSize="{TemplateBinding FontSize}"
                                                           TextDecorations="Underline"
                                                           Foreground="{TemplateBinding Foreground}"
                                                           VerticalAlignment="Center"
@@ -403,8 +400,12 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <Button Content="{DynamicResource {x:Static local:MainWindow.ResBtnEdit}}" FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}" Margin="2,0" Padding="4,2" Style="{StaticResource ModernButtonStyle}" Click="BtnEditRow_Click" Tag="{Binding}"/>
-                                        <Button Content="{DynamicResource {x:Static local:MainWindow.ResBtnRemove}}" FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}" Margin="2,0" Padding="4,2" Style="{StaticResource ModernButtonStyle}" Click="BtnDeleteRow_Click" Tag="{Binding}"/>
+                                        <Button Margin="2,0" Padding="4,2" Style="{StaticResource ModernButtonStyle}" Click="BtnEditRow_Click" Tag="{Binding}">
+                                            <TextBlock Text="{DynamicResource {x:Static local:MainWindow.ResBtnEdit}}" FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                        </Button>
+                                        <Button Margin="2,0" Padding="4,2" Style="{StaticResource ModernButtonStyle}" Click="BtnDeleteRow_Click" Tag="{Binding}">
+                                            <TextBlock Text="{DynamicResource {x:Static local:MainWindow.ResBtnRemove}}" FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                        </Button>
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -608,5 +609,48 @@
                 </Border>
             </Grid>
         </Border>
+
+        <!-- 保护口令锁定覆盖层 -->
+        <Grid x:Name="GridLockOverlay" Grid.ColumnSpan="3" Panel.ZIndex="9999" Visibility="Collapsed" Background="#CC000000">
+            <Border x:Name="BorderLockCard" Background="{DynamicResource SidebarBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Width="440" Padding="36,32" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="40" ShadowDepth="0" Opacity="0.55" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Image Source="Assets/logo.png" Width="56" Height="56" HorizontalAlignment="Center" Margin="0,0,0,14" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock x:Name="TxtLockTitle" Text="{DynamicResource {x:Static local:MainWindow.ResLockTitle}}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AppForeground}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+
+                    <!-- 口令解锁 -->
+                    <StackPanel x:Name="PanelLockNormal">
+                        <TextBlock x:Name="TxtLockSubtitle" Text="{DynamicResource {x:Static local:MainWindow.ResLockSubtitle}}" FontSize="13" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,22"/>
+                        <PasswordBox x:Name="PwdUnlock" Height="38" FontSize="14" Padding="10,7" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource BorderBrush}" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,12" KeyDown="PwdUnlock_KeyDown"/>
+                        <TextBlock x:Name="TxtLockError" FontSize="12.5" Foreground="{DynamicResource Danger}" TextWrapping="Wrap" Margin="0,0,0,10" Visibility="Collapsed"/>
+                        <TextBlock x:Name="TxtLockDestroyHint" Text="{DynamicResource {x:Static local:MainWindow.ResLockDestroyMessage}}" FontSize="12" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
+                        <TextBlock x:Name="TxtLockWipeNotAllowed" Text="{DynamicResource {x:Static local:MainWindow.ResLockWipeNotAllowed}}" FontSize="12" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                            <Button x:Name="BtnUnlock" Content="{DynamicResource {x:Static local:MainWindow.ResLockUnlock}}" Style="{StaticResource PrimaryButtonStyle}" FontSize="14" Padding="24,9" Margin="0,0,10,0" Click="BtnUnlock_Click"/>
+                            <Button x:Name="BtnForgot" Content="{DynamicResource {x:Static local:MainWindow.ResLockForgot}}" Style="{StaticResource ModernButtonStyle}" FontSize="14" Padding="18,9" Margin="0,0,10,0" Click="BtnForgot_Click"/>
+                            <Button x:Name="BtnDestroyData" Content="{DynamicResource {x:Static local:MainWindow.ResLockDestroy}}" Style="{StaticResource ModernButtonStyle}" FontSize="14" Padding="18,9" Visibility="Collapsed" Click="BtnDestroyData_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 凭恢复口令重置保护口令 -->
+                    <StackPanel x:Name="PanelLockRecovery" Visibility="Collapsed">
+                        <TextBlock Text="{DynamicResource {x:Static local:MainWindow.ResLockRecoveryDesc}}" FontSize="12.5" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                        <TextBlock Text="{DynamicResource {x:Static local:MainWindow.ResLockRecoveryCode}}" FontWeight="SemiBold" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,6"/>
+                        <TextBox x:Name="TxtRecoveryInput" Height="38" FontSize="14" FontFamily="Consolas" CharacterCasing="Upper" Padding="10,7" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource BorderBrush}" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,12" KeyDown="TxtRecoveryInput_KeyDown"/>
+                        <TextBlock Text="{DynamicResource {x:Static local:MainWindow.ResLockRecoveryNew}}" FontWeight="SemiBold" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,6"/>
+                        <PasswordBox x:Name="PwdRecoveryNew" Height="38" FontSize="14" Padding="10,7" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource BorderBrush}" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,12"/>
+                        <TextBlock Text="{DynamicResource {x:Static local:MainWindow.ResLockRecoveryConfirm}}" FontWeight="SemiBold" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,6"/>
+                        <PasswordBox x:Name="PwdRecoveryConfirm" Height="38" FontSize="14" Padding="10,7" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource BorderBrush}" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtRecoveryError" FontSize="12.5" Foreground="{DynamicResource Danger}" TextWrapping="Wrap" Margin="0,0,0,10" Visibility="Collapsed"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                            <Button x:Name="BtnResetPassphrase" Content="{DynamicResource {x:Static local:MainWindow.ResLockBtnReset}}" Style="{StaticResource PrimaryButtonStyle}" FontSize="14" Padding="24,9" Margin="0,0,10,0" Click="BtnResetPassphrase_Click"/>
+                            <Button x:Name="BtnRecoveryBack" Content="{DynamicResource {x:Static local:MainWindow.ResLockBtnBack}}" Style="{StaticResource ModernButtonStyle}" FontSize="14" Padding="18,9" Click="BtnRecoveryBack_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

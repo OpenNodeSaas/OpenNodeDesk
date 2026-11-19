@@ -14,17 +14,43 @@ public partial class SettingsView : UserControl
 {
     // Localization Keys
     public const string ResTitle = "Settings_Title";
+    public const string ResProtectionSection = "Settings_ProtectionSection";
+    public const string ResProtectionEnable = "Settings_ProtectionEnable";
+    public const string ResProtectionPassword = "Settings_ProtectionPassword";
+    public const string ResProtectionConfirm = "Settings_ProtectionConfirm";
+    public const string ResProtectionIdle = "Settings_ProtectionIdle";
+    public const string ResProtectionLockNow = "Settings_ProtectionLockNow";
+    public const string ResProtectionHint = "Settings_ProtectionHint";
+    public const string ResProtectionAllowWipe = "Settings_ProtectionAllowWipe";
 
     private static LocalizationManager L10n => LocalizationManager.Instance;
 
     /// <summary>用户在设置页点击保存时触发（VNC 与 SSH 外观一起保存）。</summary>
     public event Action? Saved;
 
+    /// <summary>用户点击「立即锁定」并校验通过后触发，由主窗口执行锁定。</summary>
+    public event Action? LockRequested;
+
+    /// <summary>当前 Saved 事件是否由「立即锁定」触发（用于跳过"设置已保存"弹窗）。</summary>
+    public bool IsLockPending { get; private set; }
+
     public string VncViewerPath => TxtViewerPath.Text.Trim();
     public string VncArgumentTemplate => TxtArgs.Text.Trim();
     public double SshFontSize => SliderFontSize.Value;
     public int SshSchemeIndex => CmbScheme.SelectedIndex;
     public bool SshStandaloneWindow => ChkSshStandalone.IsChecked == true;
+
+    public bool ProtectionEnabled => ChkProtectionEnable.IsChecked == true;
+    public int ProtectionIdleMinutes => (CmbProtectionIdle.SelectedItem as ComboBoxItem)?.Tag as int? ?? 10;
+    public bool ProtectionAllowDataWipe => ChkAllowDataWipe.IsChecked == true;
+    public string NewPassword => PwdProtection.Password;
+    public string ConfirmPassword => PwdProtectionConfirm.Password;
+
+    /// <summary>本次保存新生成、需要用户抄写的恢复口令；不修改口令时为 null。</summary>
+    public string? RecoveryCode { get; private set; }
+
+    private bool _hasExistingPassword;
+    private bool _loading;
 
     public SettingsView()
     {
@@ -41,13 +67,25 @@ public partial class SettingsView : UserControl
     }
 
     /// <summary>由主窗口在加载设置时调用，回填当前值。</summary>
-    public void LoadSettings(string viewerPath, string argumentTemplate, double sshFontSize, int sshScheme, bool sshStandaloneWindow)
+    public void LoadSettings(string viewerPath, string argumentTemplate, double sshFontSize, int sshScheme, bool sshStandaloneWindow,
+        bool protectionEnabled = false, int protectionIdleMinutes = 10, bool hasExistingPassword = false, bool protectionAllowDataWipe = true)
     {
         TxtViewerPath.Text = viewerPath ?? "";
         TxtArgs.Text = argumentTemplate ?? "";
         SliderFontSize.Value = Math.Clamp(sshFontSize, SshTerminalView.MinFontSize, SshTerminalView.MaxFontSize);
         CmbScheme.SelectedIndex = Math.Clamp(sshScheme, 0, CmbScheme.Items.Count - 1);
         ChkSshStandalone.IsChecked = sshStandaloneWindow;
+
+        _loading = true;
+        ChkProtectionEnable.IsChecked = protectionEnabled;
+        SelectIdleMinutes(protectionIdleMinutes);
+        ChkAllowDataWipe.IsChecked = protectionAllowDataWipe;
+        PwdProtection.Password = "";
+        PwdProtectionConfirm.Password = "";
+        _hasExistingPassword = hasExistingPassword;
+        UpdateProtectionEnabledState();
+        _loading = false;
+
         RefreshViewerStatus();
         UpdatePreview();
     }
@@ -69,6 +107,71 @@ public partial class SettingsView : UserControl
         BtnSaveSettings.Content = L10n["Settings_BtnSave"];
         RebuildSchemeItems();
         UpdateFontSizeValue();
+
+        TxtProtectionSection.Text = L10n[ResProtectionSection];
+        ChkProtectionEnable.Content = L10n[ResProtectionEnable];
+        TxtProtectionPasswordLabel.Text = L10n[ResProtectionPassword];
+        TxtProtectionConfirmLabel.Text = L10n[ResProtectionConfirm];
+        TxtProtectionIdleLabel.Text = L10n[ResProtectionIdle];
+        ChkAllowDataWipe.Content = L10n[ResProtectionAllowWipe];
+        TxtProtectionExistingHint.Text = L10n[ResProtectionHint];
+        TxtProtectionRisk.Text = L10n["Settings_ProtectionRisk"];
+        BtnLockNow.Content = L10n[ResProtectionLockNow];
+        RebuildProtectionIdleItems();
+    }
+
+    /// <summary>按当前语言重建空闲锁定时长下拉项，并尽量保留原选中分钟数。</summary>
+    private void RebuildProtectionIdleItems()
+    {
+        int current = ProtectionIdleMinutes;
+        CmbProtectionIdle.Items.Clear();
+        foreach (int minutes in new[] { 1, 5, 10, 15, 30, 60 })
+        {
+            CmbProtectionIdle.Items.Add(new ComboBoxItem
+            {
+                Content = L10n[$"Settings_ProtectionIdle{minutes}"],
+                Tag = minutes
+            });
+        }
+        SelectIdleMinutes(current);
+    }
+
+    /// <summary>按分钟数选中下拉项；找不到时回落到 10 分钟（索引 2）。</summary>
+    private void SelectIdleMinutes(int minutes)
+    {
+        if (CmbProtectionIdle is null) return;
+
+        foreach (var item in CmbProtectionIdle.Items)
+        {
+            if (item is ComboBoxItem cbi && cbi.Tag is int m && m == minutes)
+            {
+                CmbProtectionIdle.SelectedItem = cbi;
+                return;
+            }
+        }
+
+        if (CmbProtectionIdle.Items.Count > 2)
+        {
+            CmbProtectionIdle.SelectedIndex = 2;
+        }
+    }
+
+    private void ChkProtectionEnable_Changed(object sender, RoutedEventArgs e)
+    {
+        // 加载设置期间由 LoadSettings 统一刷新，避免读到尚未回填的已存口令标记
+        if (!_loading) UpdateProtectionEnabledState();
+    }
+
+    /// <summary>口令相关控件的可用状态与已存口令提示跟随启用开关。</summary>
+    private void UpdateProtectionEnabledState()
+    {
+        bool enabled = ProtectionEnabled;
+        PwdProtection.IsEnabled = enabled;
+        PwdProtectionConfirm.IsEnabled = enabled;
+        CmbProtectionIdle.IsEnabled = enabled;
+        ChkAllowDataWipe.IsEnabled = enabled;
+        BtnLockNow.IsEnabled = enabled;
+        TxtProtectionExistingHint.Visibility = enabled && _hasExistingPassword ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>按当前语言重建配色方案下拉项，并尽量保留原选中档位。</summary>
@@ -172,7 +275,97 @@ public partial class SettingsView : UserControl
 
     private void BtnSave_Click(object sender, RoutedEventArgs e)
     {
+        if (!ValidateProtection()) return;
+
+        PrepareRecoveryCode();
         Saved?.Invoke();
+
+        // 口令已落盘：清空输入框并点亮「已设置口令」提示，避免再次保存时重复生成恢复口令
+        ClearPasswordInputs();
         RefreshViewerStatus();
     }
+
+    private void BtnLockNow_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ValidateProtection()) return;
+
+        PrepareRecoveryCode();
+        IsLockPending = true;
+        try
+        {
+            Saved?.Invoke();      // 先落盘
+            LockRequested?.Invoke();
+        }
+        finally
+        {
+            IsLockPending = false;
+            ClearPasswordInputs();
+        }
+    }
+
+    /// <summary>启用保护且本次输入了新口令时生成恢复口令并提示用户备份；不修改口令时清空。</summary>
+    private void PrepareRecoveryCode()
+    {
+        if (!ProtectionEnabled || NewPassword.Trim().Length == 0)
+        {
+            RecoveryCode = null;
+            return;
+        }
+
+        RecoveryCode = ProtectionHasher.GenerateRecoveryCode();
+        try
+        {
+            Clipboard.SetText(RecoveryCode);
+        }
+        catch (Exception)
+        {
+            // 剪贴板可能被其他进程占用；弹窗里仍会展示恢复口令
+        }
+
+        MessageBox.Show(Window.GetWindow(this),
+            L10n.Format("Settings_ProtectionRecoveryMessage", RecoveryCode),
+            L10n["Settings_ProtectionRecoveryTitle"], MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>保存成功后清空口令输入，并标记为「已设置口令」。</summary>
+    private void ClearPasswordInputs()
+    {
+        PwdProtection.Clear();
+        PwdProtectionConfirm.Clear();
+        _hasExistingPassword = ProtectionEnabled;
+        UpdateProtectionEnabledState();
+    }
+
+    /// <summary>校验保护口令输入；未启用或无需修改口令时直接通过。</summary>
+    private bool ValidateProtection()
+    {
+        if (!ProtectionEnabled) return true;
+
+        var pwd = NewPassword.Trim();
+        var pwdConfirm = ConfirmPassword;
+
+        if (pwd.Length == 0)
+        {
+            if (_hasExistingPassword) return true;
+            ShowProtectionWarning(L10n["Settings_ProtectionPasswordRequired"]);
+            return false;
+        }
+
+        if (pwd.Length < 4)
+        {
+            ShowProtectionWarning(L10n["Settings_ProtectionPasswordTooShort"]);
+            return false;
+        }
+
+        if (pwd != pwdConfirm)
+        {
+            ShowProtectionWarning(L10n["Settings_ProtectionPasswordMismatch"]);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ShowProtectionWarning(string message) =>
+        MessageBox.Show(Window.GetWindow(this), message, L10n["Msg_Tip"], MessageBoxButton.OK, MessageBoxImage.Warning);
 }
