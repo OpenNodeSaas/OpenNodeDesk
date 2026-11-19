@@ -134,6 +134,9 @@ public class ServerAssetViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(Group));
     }
 
+    /// <summary>Model 被整体替换（如导入覆盖）后，刷新所有依赖它的展示属性。</summary>
+    public void NotifyAllChanged() => OnPropertyChanged(null);
+
     public bool IsExpiredOrNear
     {
         get => _isExpiredOrNear;
@@ -676,12 +679,12 @@ public partial class MainWindow : Window
         ApplyAssetListFontSize(data.AssetListFontSize);
     }
 
-    /// <summary>字号同时驱动行高与表头高度；行高按最紧凑间距计算，保证列表默认密度最高。</summary>
+    /// <summary>字号同时驱动行高与表头高度；表头字号随档位（不再硬编码），行高按最紧凑间距计算，保证列表默认密度最高。</summary>
     private void ApplyAssetListFontSize(double size)
     {
         GridAssets.FontSize = size;
         GridAssets.RowHeight = Math.Round(size * 2.0);
-        // 表头文字固定为 14px，额外留 8px 以容纳上下内边距，避免小字号时表头被裁切
+        // 表头文字随档位字号，额外留 8px 以容纳上下内边距，避免小字号时表头被裁切
         GridAssets.ColumnHeaderHeight = Math.Round(size * 2.0) + 8;
     }
 
@@ -701,7 +704,7 @@ public partial class MainWindow : Window
             CmbListFontSize.Items.Clear();
             var sizes = new (int Value, string Key)[]
             {
-                (10, ResFontSizeTiny), (12, ResFontSizeSmall), (14, ResFontSizeNormal),
+                (9, ResFontSizeTiny), (12, ResFontSizeSmall), (14, ResFontSizeNormal),
                 (16, ResFontSizeLarge), (18, ResFontSizeXLarge)
             };
             int current = (int)Math.Round(GridAssets.FontSize);
@@ -1602,7 +1605,16 @@ public partial class MainWindow : Window
                 importResult = AssetCsvService.ImportCsv(File.ReadAllText(dlg.FileName));
             }
 
-            int added = 0;
+            // 以「IP:端口」为键索引现有资产（忽略主机名大小写），用于导入判重
+            var index = new Dictionary<string, ServerAssetViewModel>(StringComparer.OrdinalIgnoreCase);
+            foreach (var vm in _allAssets)
+            {
+                index[HostPortKey(vm.Host, vm.Port)] = vm;
+            }
+
+            int added = 0, overwritten = 0, dupSkipped = 0;
+            ImportConflictAction? bulkAction = null;
+
             foreach (var asset in importResult.Assets)
             {
                 var model = asset;
@@ -1611,19 +1623,49 @@ public partial class MainWindow : Window
                 {
                     model = asset with { EncryptedPassword = CredentialProtector.Protect(asset.Password) };
                 }
-                RegisterAsset(new ServerAssetViewModel(model));
-                added++;
+
+                var key = HostPortKey(model.Host, model.Port);
+                if (index.TryGetValue(key, out var existing))
+                {
+                    // 重复项：沿用已选定的批量策略，否则弹窗询问「跳过 / 覆盖」
+                    var action = bulkAction;
+                    if (action is null)
+                    {
+                        action = AskImportConflict(existing, model, out bool applyToAll);
+                        if (applyToAll) bulkAction = action;
+                    }
+
+                    if (action == ImportConflictAction.Skip)
+                    {
+                        dupSkipped++;
+                        continue;
+                    }
+
+                    // 覆盖：保留现有 Id（维持引用与列表位置），替换其余字段
+                    existing.Model = model with { Id = existing.Id };
+                    existing.NotifyAllChanged();
+                    overwritten++;
+                }
+                else
+                {
+                    var vm = new ServerAssetViewModel(model);
+                    RegisterAsset(vm);
+                    index[key] = vm;
+                    added++;
+                }
             }
 
             SaveAssetsToStore();
             ApplyFilter();
 
             string msg = L10n.Format("Msg_ImportDone", added);
+            if (overwritten > 0) msg += "\n" + L10n.Format("Msg_ImportOverwritten", overwritten);
+            if (dupSkipped > 0) msg += "\n" + L10n.Format("Msg_ImportDupSkipped", dupSkipped);
             if (importResult.Errors.Count > 0)
             {
                 msg += "\n" + L10n.Format("Msg_ImportSkipped", importResult.Errors.Count);
             }
-            if (added == 0)
+            if (added == 0 && overwritten == 0 && dupSkipped == 0)
             {
                 msg += "\n\n" + L10n["Msg_ImportFormatHint"];
             }
@@ -1633,6 +1675,18 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(L10n.Format("Msg_ImportFailed", ex.Message), L10n["Msg_ErrorTitle"], MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>导入判重用的键：IP + 端口（主机名忽略大小写与首尾空白）。</summary>
+    private static string HostPortKey(string host, int port) => $"{host.Trim()}:{port}";
+
+    /// <summary>弹窗询问重复项如何处置，返回用户选择并回传是否应用到全部。</summary>
+    private ImportConflictAction AskImportConflict(ServerAssetViewModel existing, ServerAsset model, out bool applyToAll)
+    {
+        var dlg = new ImportConflictDialog(existing.IpPortDisplay, existing.Name, model.Name) { Owner = this };
+        bool? ok = dlg.ShowDialog();
+        applyToAll = ok == true && dlg.ApplyToAll;
+        return ok == true ? dlg.Action : ImportConflictAction.Skip;
     }
 
     private void BtnExportSelected_Click(object sender, RoutedEventArgs e)
