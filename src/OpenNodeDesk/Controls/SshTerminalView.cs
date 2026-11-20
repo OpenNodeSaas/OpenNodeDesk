@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -36,6 +37,9 @@ namespace OpenNodeDesk.Controls
             _schemeIndex = Math.Clamp(schemeIndex, 0, SchemeNames.Length - 1);
         }
 
+        /// <summary>用户点击工具栏「SFTP 文件」时触发，由宿主打开文件传输窗口。</summary>
+        public event Action? SftpRequested;
+
         private readonly TerminalControl _terminal;
         private readonly Border _statusBar;
         private readonly TextBlock _status;
@@ -48,7 +52,7 @@ namespace OpenNodeDesk.Controls
             RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            _terminal = new TerminalControl
+            _terminal = new SafeTerminalControl
             {
                 Focusable = true,
                 IsTabStop = true,
@@ -110,6 +114,10 @@ namespace OpenNodeDesk.Controls
             var larger = CreateBarButton("A+");
             larger.Click += (s, e) => ChangeFontSize(1);
             _tools.Children.Add(larger);
+
+            var sftp = CreateBarButton(L10n["Term_Sftp"]);
+            sftp.Click += (s, e) => SftpRequested?.Invoke();
+            _tools.Children.Add(sftp);
 
             bar.Children.Add(_tools);
             _statusBar.Child = bar;
@@ -214,13 +222,17 @@ namespace OpenNodeDesk.Controls
             menu.Items.Add(new Separator());
             menu.Items.Add(selectAll);
             menu.Items.Add(clear);
-            menu.Opened += (s, e) =>
+
+            void RefreshHeaders()
             {
                 copy.Header = L10n["Term_Copy"];
                 paste.Header = L10n["Term_Paste"];
                 selectAll.Header = L10n["Term_SelectAll"];
                 clear.Header = L10n["Term_Clear"];
-            };
+            }
+
+            RefreshHeaders();
+            menu.Opened += (s, e) => RefreshHeaders();
             return menu;
         }
 
@@ -297,5 +309,16 @@ namespace OpenNodeDesk.Controls
         }
 
         private static Color ColorOf(string hex) => (Color)ColorConverter.ConvertFromString(hex);
+
+        /// <summary>
+        /// VirtualTerminal.WPF 1.10.0 的自动化 Peer 在构造时会对尚未注册的 provider 抛
+        /// ArgumentNullException（UI Automation 刷新时必现），导致右键菜单弹出瞬间进程崩溃。
+        /// 终端本身不需要无障碍自动化，这里不创建 Peer 以绕开该缺陷。
+        /// </summary>
+        private sealed class SafeTerminalControl : TerminalControl
+        {
+            // 基类签名不可为空，这里有意返回 null 表示「不参与 UI 自动化」
+            protected override AutomationPeer OnCreateAutomationPeer() => null!;
+        }
     }
 }

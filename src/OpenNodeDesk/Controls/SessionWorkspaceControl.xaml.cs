@@ -59,6 +59,7 @@ public partial class SessionWorkspaceControl : UserControl
     public const string ResLayoutConfig = "Layout_Config";
     public const string ResLayoutDisconnect = "Layout_Disconnect";
     public const string ResLayoutCloseAll = "Layout_CloseAll";
+    public const string ResLayoutOpen = "Layout_Open";
 
     private static LocalizationManager L10n => LocalizationManager.Instance;
 
@@ -69,6 +70,9 @@ public partial class SessionWorkspaceControl : UserControl
     public event Action<SessionItemViewModel?>? ActiveSessionChanged;
     public event Action? RequestOpenSettingsDrawer;
     public event Action? RequestFullscreenToggle;
+
+    /// <summary>用户点击「打开」时触发，由主窗口弹出资产选择框并连接。</summary>
+    public event Action? RequestOpenAsset;
 
     /// <summary>SSH 会话连接失败时触发（UI 线程），携带失败会话与错误信息，供上层决定是否回退提示重新输入凭据。</summary>
     public event Action<SessionItemViewModel, string?>? SessionConnectFailed;
@@ -539,6 +543,11 @@ public partial class SessionWorkspaceControl : UserControl
     private void BtnSettingsDrawer_Click(object sender, RoutedEventArgs e)
     {
         RequestOpenSettingsDrawer?.Invoke();
+    }
+
+    private void BtnOpenAsset_Click(object sender, RoutedEventArgs e)
+    {
+        RequestOpenAsset?.Invoke();
     }
 
     private void BtnDisconnectActive_Click(object sender, RoutedEventArgs e)

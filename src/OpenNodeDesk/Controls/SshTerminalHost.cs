@@ -22,6 +22,10 @@ public sealed class SshTerminalHost : Border
     private readonly Border _messageBar;
     private readonly TextBlock _messageText;
     private readonly SshTerminalView _terminal;
+    private readonly ServerAsset _asset;
+    private readonly string? _password;
+    private readonly string? _privateKeyPath;
+    private readonly string? _privateKeyPassphrase;
     private SecureShellSession? _session;
     private SshJumpConnection? _jumpConnection;
     private bool _connectStarted;
@@ -38,6 +42,11 @@ public sealed class SshTerminalHost : Border
     public SshTerminalHost(ServerAsset asset, string? password, string? privateKeyPath, string? privateKeyPassphrase,
         ServerAsset? jumpAsset, string? jumpPassword)
     {
+        _asset = asset;
+        _password = password;
+        _privateKeyPath = privateKeyPath;
+        _privateKeyPassphrase = privateKeyPassphrase;
+
         // 顶部错误提示条 + 原生 WPF 终端（不依赖 WebView2 运行时）
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -61,6 +70,7 @@ public sealed class SshTerminalHost : Border
         grid.Children.Add(_messageBar);
 
         _terminal = new SshTerminalView();
+        _terminal.SftpRequested += OpenSftpWindow;
         Grid.SetRow(_terminal, 1);
         grid.Children.Add(_terminal);
 
@@ -155,6 +165,39 @@ public sealed class SshTerminalHost : Border
                 ConnectFailed?.Invoke(connectError);
             }
         };
+    }
+
+    /// <summary>打开 SFTP 文件传输窗口；跳板机场景复用已建立的本地端口转发。</summary>
+    private void OpenSftpWindow()
+    {
+        if (_session == null)
+        {
+            ShowMessage(L10n["Sftp_NotConnected"]);
+            return;
+        }
+
+        string host = _jumpConnection?.LoopbackHost ?? _asset.Host;
+        int port = _jumpConnection?.LoopbackPort ?? _asset.Port;
+        string username = string.IsNullOrWhiteSpace(_asset.Username) ? "root" : _asset.Username;
+
+        var window = new SftpWindow(_asset.Name, $"{_asset.Host}:{_asset.Port}", () =>
+            CreateSftpClient(host, port, username, _password, _privateKeyPath, _privateKeyPassphrase));
+
+        var owner = Window.GetWindow(this);
+        if (owner != null) window.Owner = owner;
+        window.Show();
+    }
+
+    /// <summary>按凭据类型创建 SFTP 客户端（密钥优先，其次密码）。</summary>
+    private static SftpClient CreateSftpClient(string host, int port, string username, string? password, string? keyPath, string? passphrase)
+    {
+        if (!string.IsNullOrEmpty(keyPath) && File.Exists(keyPath))
+        {
+            var keyFile = string.IsNullOrEmpty(passphrase) ? new PrivateKeyFile(keyPath) : new PrivateKeyFile(keyPath, passphrase);
+            return new SftpClient(host, port, username, keyFile);
+        }
+
+        return new SftpClient(host, port, username, password ?? "");
     }
 
     /// <summary>释放本次会话（终端被移除或窗口关闭时调用，可重复调用）。</summary>

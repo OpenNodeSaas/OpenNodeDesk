@@ -78,8 +78,9 @@
                     <Button x:Name="BtnLayout3x3" Content="{DynamicResource {x:Static local:SessionWorkspaceControl.ResLayout3x3}}" Style="{StaticResource ModernButtonStyle}" Margin="3,0" Padding="8,3" Click="BtnLayout3x3_Click"/>
                 </StackPanel>
 
-                <!-- 右侧：工具快捷键 (全屏、断开、连接抽屉) -->
+                <!-- 右侧：工具快捷键 (打开资产、全屏、断开、连接抽屉) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnOpenAsset" Content="{DynamicResource {x:Static local:SessionWorkspaceControl.ResLayoutOpen}}" Style="{StaticResource ModernButtonStyle}" Margin="3,0" Padding="8,3" Foreground="{DynamicResource Primary}" Click="BtnOpenAsset_Click"/>
                     <Button x:Name="BtnFitWindow" Content="{DynamicResource {x:Static local:SessionWorkspaceControl.ResLayoutFit}}" Style="{StaticResource ModernButtonStyle}" Margin="3,0" Padding="8,3" Click="BtnFitWindow_Click"/>
                     <Button x:Name="BtnFullscreen" Content="{DynamicResource {x:Static local:SessionWorkspaceControl.ResLayoutFullscreen}}" Style="{StaticResource ModernButtonStyle}" Margin="3,0" Padding="8,3" Click="BtnFullscreen_Click"/>
                     <Button x:Name="BtnSettingsDrawer" Content="{DynamicResource {x:Static local:SessionWorkspaceControl.ResLayoutConfig}}" Style="{StaticResource ModernButtonStyle}" Margin="3,0" Padding="8,3" Foreground="{DynamicResource Primary}" Click="BtnSettingsDrawer_Click"/>

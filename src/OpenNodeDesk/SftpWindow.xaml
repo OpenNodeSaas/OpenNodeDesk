@@ -1,0 +1,56 @@
+<Window x:Class="OpenNodeDesk.SftpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OpenNodeDesk"
+        Title="{DynamicResource {x:Static local:SftpWindow.ResTitle}}"
+        Width="860" Height="580" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackground}">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="BtnUpload" Content="{DynamicResource {x:Static local:SftpWindow.ResUpload}}"
+                    Style="{StaticResource ModernButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="BtnUpload_Click"/>
+            <Button x:Name="BtnDownload" Content="{DynamicResource {x:Static local:SftpWindow.ResDownload}}"
+                    Style="{StaticResource ModernButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="BtnDownload_Click"/>
+            <Button x:Name="BtnRefresh" Content="{DynamicResource {x:Static local:SftpWindow.ResRefresh}}"
+                    Style="{StaticResource ModernButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="BtnRefresh_Click"/>
+            <Button x:Name="BtnUp" Content="{DynamicResource {x:Static local:SftpWindow.ResUp}}"
+                    Style="{StaticResource ModernButtonStyle}" Padding="10,4" Click="BtnUp_Click"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="TxtPath" Style="{StaticResource ModernTextBoxStyle}" Height="30"
+                     VerticalContentAlignment="Center" KeyDown="TxtPath_KeyDown"/>
+            <Button Grid.Column="1" Content="{DynamicResource {x:Static local:SftpWindow.ResGo}}"
+                    Style="{StaticResource ModernButtonStyle}" Padding="12,4" Margin="6,0,0,0" Click="BtnGo_Click"/>
+        </Grid>
+
+        <ListView x:Name="LstFiles" Grid.Row="2" MouseDoubleClick="LstFiles_MouseDoubleClick"
+                  Background="{DynamicResource SurfaceBackground}" Foreground="{DynamicResource AppForeground}"
+                  BorderBrush="{DynamicResource BorderBrush}">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="{DynamicResource {x:Static local:SftpWindow.ResName}}" Width="450"
+                                    DisplayMemberBinding="{Binding DisplayName}"/>
+                    <GridViewColumn Header="{DynamicResource {x:Static local:SftpWindow.ResSize}}" Width="110"
+                                    DisplayMemberBinding="{Binding SizeText}"/>
+                    <GridViewColumn Header="{DynamicResource {x:Static local:SftpWindow.ResModified}}" Width="200"
+                                    DisplayMemberBinding="{Binding ModifiedText}"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <TextBlock x:Name="TxtStatus" Grid.Row="3" Margin="0,8,0,0"
+                   Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"/>
+    </Grid>
+</Window>

@@ -420,6 +420,12 @@ public partial class MainWindow : Window
 
         SessionWorkspace.RequestFullscreenToggle += ToggleWorkspaceFullscreen;
         SessionWorkspace.SessionConnectFailed += OnSessionConnectFailed;
+        SessionWorkspace.RequestOpenAsset += () =>
+        {
+            var picker = new AssetPickerWindow(_allAssets.ToList()) { Owner = this };
+            if (picker.ShowDialog() != true || picker.SelectedAsset is null) return;
+            ConnectServer(picker.SelectedAsset);
+        };
 
         // 设置页保存：VNC 客户端 + SSH 终端外观 + 保护口令，写入内存后同步到工作台/新会话并落盘
         SettingsView.Saved += () =>
