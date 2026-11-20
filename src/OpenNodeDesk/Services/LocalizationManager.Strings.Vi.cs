@@ -29,6 +29,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "Nhập",
         ["Btn_ExportSelected"] = "Xuất mục đã chọn",
         ["Btn_Delete"] = "Xóa",
+        ["Btn_BatchTemplate"] = "Gán mẫu",
         ["Btn_Open"] = "Kết nối",
         ["Btn_Connect"] = "Kết nối",
         ["Btn_ShowAll"] = "Hiện tất cả",

@@ -53,7 +53,19 @@ public class ServerAssetViewModel : INotifyPropertyChanged
     public string Protocol => Model.Protocol;
     public string Username => Model.Username;
     public string Group => string.IsNullOrWhiteSpace(Model.Group) ? LocalizationManager.Instance["Group_Default"] : Model.Group;
-    public string TemplateName { get; set; } = "-";
+    private string _templateName = "-";
+    public string TemplateName
+    {
+        get => _templateName;
+        set
+        {
+            if (_templateName != value)
+            {
+                _templateName = value;
+                OnPropertyChanged();
+            }
+        }
+    }
     public string Owner => Model.Owner;
     public DateOnly? ExpiresOn => Model.ExpiresOn;
     public bool IsFavorite => Model.IsFavorite;
@@ -247,6 +259,7 @@ public partial class MainWindow : Window
     public const string ResBtnExportSelected = "Btn_ExportSelected";
     public const string ResBtnInvertSelect = "Btn_InvertSelect";
     public const string ResBtnDelete = "Btn_Delete";
+    public const string ResBtnBatchTemplate = "Btn_BatchTemplate";
     public const string ResBtnOpen = "Btn_Open";
     public const string ResBtnShowAll = "Btn_ShowAll";
     public const string ResBtnSyncCloud = "Btn_SyncCloud";
@@ -359,7 +372,8 @@ public partial class MainWindow : Window
         // 卡片面板（WrapPanel）不虚拟化，改为仅在卡片视图可见时绑定，避免切过一次后所有卡片容器常驻内存
         ItemsCardsGrid.ItemsSource = null;
 
-        // 恢复资产列表的列显隐 / 顺序 / 字号偏好
+        // 恢复资产列表的列显隐 / 顺序 / 列宽 / 字号偏好
+        HookColumnWidthPersistence();
         ApplyAssetListPreferences();
 
         ThemeManager.Instance.ThemeChanged += (s, e) => {
@@ -390,6 +404,7 @@ public partial class MainWindow : Window
             if (existingVm != null)
             {
                 existingVm.Model = updatedAsset;
+                existingVm.TemplateName = ResolveTemplateName(updatedAsset.TemplateId);
                 existingVm.UpdateExpiryStatus();
             }
             SaveAssetsToStore();
@@ -637,21 +652,6 @@ public partial class MainWindow : Window
         PersistLeftNavCollapsed(_leftNavCollapsed);
     }
 
-    /// <summary>收起态下鼠标进入导航栏临时展开（不改变持久化状态），离开后恢复。</summary>
-    private void BorderLeftNav_MouseEnter(object sender, MouseEventArgs e)
-    {
-        if (_isWorkspaceFullscreen || !_leftNavCollapsed) return;
-        ApplyLeftNavVisual(false);
-        ColLeftNav.Width = new GridLength(LeftNavExpandedWidth);
-    }
-
-    private void BorderLeftNav_MouseLeave(object sender, MouseEventArgs e)
-    {
-        if (_isWorkspaceFullscreen || !_leftNavCollapsed) return;
-        ApplyLeftNavVisual(true);
-        ColLeftNav.Width = new GridLength(LeftNavCollapsedWidth);
-    }
-
     /// <summary>统一应用左侧导航状态：宽度、图标/文字可见性与折叠按钮外观。</summary>
     private void ApplyLeftNavState(bool collapsed)
     {
@@ -716,6 +716,9 @@ public partial class MainWindow : Window
     private static readonly string[] AssetListRequiredColumns = ["Name", "Action"];
 
     private bool _suppressColumnSettingsEvents;
+
+    /// <summary>列宽拖拽防抖：拖拽结束后 600ms 合并写盘一次，避免逐像素落盘。</summary>
+    private readonly DispatcherTimer _columnWidthSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(600) };
 
     /// <summary>列 key → DataGridColumn。</summary>
     private DataGridColumn? ResolveColumn(string key) => key switch
@@ -786,7 +789,46 @@ public partial class MainWindow : Window
                 : Visibility.Visible;
         }
 
+        // 列宽：还原用户上次拖拽的宽度（期间抑制变更回调，避免回写自身）
+        _suppressColumnSettingsEvents = true;
+        try
+        {
+            foreach (var (key, width) in data.AssetListColumnWidths)
+            {
+                var col = ResolveColumn(key);
+                if (col != null) col.Width = new DataGridLength(width);
+            }
+        }
+        finally
+        {
+            _suppressColumnSettingsEvents = false;
+        }
+
         ApplyAssetListFontSize(data.AssetListFontSize);
+    }
+
+    /// <summary>为每列挂上宽度变化监听：用户拖拽后延时合并写盘，避免逐像素写文件。</summary>
+    private void HookColumnWidthPersistence()
+    {
+        _columnWidthSaveTimer.Tick += (_, _) =>
+        {
+            _columnWidthSaveTimer.Stop();
+            PersistAssetListPreferences();
+        };
+
+        var descriptor = DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty, typeof(DataGridColumn));
+        if (descriptor == null) return;
+        foreach (var col in GridAssets.Columns)
+        {
+            descriptor.AddValueChanged(col, OnColumnWidthChanged);
+        }
+    }
+
+    private void OnColumnWidthChanged(object? sender, EventArgs e)
+    {
+        if (_suppressColumnSettingsEvents) return;
+        _columnWidthSaveTimer.Stop();
+        _columnWidthSaveTimer.Start();
     }
 
     /// <summary>字号同时驱动行高与表头高度；表头字号随档位（不再硬编码），行高按最紧凑间距计算，保证列表默认密度最高。</summary>
@@ -933,18 +975,29 @@ public partial class MainWindow : Window
         PersistAssetListPreferences();
     }
 
-    /// <summary>把当前列顺序 / 显隐 / 字号写入本地存储（保留其余字段）。</summary>
+    /// <summary>把当前列顺序 / 显隐 / 列宽 / 字号写入本地存储（保留其余字段）。</summary>
     private void PersistAssetListPreferences()
     {
         var hidden = GridAssets.Columns.Where(c => c.Visibility != Visibility.Visible)
                                        .Select(c => KeyOf(c)).Where(k => k != null).Cast<string>().ToList();
         var order = GridAssets.Columns.OrderBy(c => c.DisplayIndex)
                                       .Select(c => KeyOf(c)).Where(k => k != null).Cast<string>().ToList();
+        var widths = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var col in GridAssets.Columns)
+        {
+            var key = KeyOf(col);
+            if (key == null) continue;
+            // 拖拽后的列宽为绝对值；Auto/Star 时用实际渲染宽度兜底
+            double width = col.Width.IsAbsolute ? col.Width.Value : col.ActualWidth;
+            if (width > 0) widths[key] = Math.Round(width);
+        }
+
         var data = _assetStore.Load();
         _assetStore.Save(data with
         {
             AssetListHiddenColumns = hidden,
             AssetListColumnOrder = order,
+            AssetListColumnWidths = widths,
             AssetListFontSize = GridAssets.FontSize
         });
     }
@@ -1167,11 +1220,7 @@ public partial class MainWindow : Window
             }
             
             // 设置模板名称
-            if (asset.TemplateId.HasValue)
-            {
-                var template = data.Templates.FirstOrDefault(t => t.Id == asset.TemplateId.Value);
-                vm.TemplateName = template?.Name ?? "-";
-            }
+            vm.TemplateName = ResolveTemplateName(asset.TemplateId);
             
             RegisterAsset(vm);
         }
@@ -1232,6 +1281,14 @@ public partial class MainWindow : Window
             if (col.Header is CheckBox chk) return chk;
         }
         return null;
+    }
+
+    /// <summary>把资产绑定的模板 Id 解析为模板名（无绑定或已失效时显示 "-"）。</summary>
+    private string ResolveTemplateName(Guid? templateId)
+    {
+        if (!templateId.HasValue) return "-";
+        var template = _assetStore.Load().Templates.FirstOrDefault(t => t.Id == templateId.Value);
+        return template?.Name ?? "-";
     }
 
     private void SaveAssetsToStore()
@@ -1690,6 +1747,32 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BtnBatchTemplate_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = _viewAssets.Where(a => a.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            MessageBox.Show(L10n["Msg_SelectAsset"], L10n["Msg_Tip"], MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new TemplatePickerDialog(_assetStore.Load().Templates) { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var templateId = dialog.SelectedTemplateId;
+        foreach (var vm in selected)
+        {
+            vm.Model = vm.Model with { TemplateId = templateId };
+            vm.TemplateName = ResolveTemplateName(templateId);
+        }
+        TxtSelectedCount.Text = L10n.Format("Status_SelectedCount", selected.Count);
+
+        SaveAssetsToStore();
+    }
+
     private void BtnImport_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
@@ -2077,7 +2160,8 @@ public partial class MainWindow : Window
     {
         if (_probe == null) return;
 
-        if (int.TryParse(TxtProbeInterval.Text.Trim(), out var minutes) && minutes >= 1)
+        // 低于最小间隔视为不启用，避免过于频繁的探测被目标网络拉黑
+        if (int.TryParse(TxtProbeInterval.Text.Trim(), out var minutes) && minutes >= ReachabilityProbe.MinIntervalMinutes)
         {
             _probe.StartPeriodicProbe(minutes, _allAssets.Select(a => a.Model), _assetStore);
         }
@@ -2436,13 +2520,15 @@ public partial class MainWindow : Window
     private void GridAssets_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         // 双击行内交互控件（收藏/模板名/编辑/删除等）时不发起连接
-        if (e.OriginalSource is DependencyObject src && IsInteractiveElement(src)) return;
+        if (e.OriginalSource is not DependencyObject src || IsInteractiveElement(src)) return;
 
-        // 双击直接连接，不展开右侧配置面板
-        if (GridAssets.SelectedItem is ServerAssetViewModel vm)
-        {
-            ConnectServer(vm, switchToWorkspace: false);
-        }
+        // 以命中行的资产为准（不依赖 SelectedItem，避免双击未选中行时无反应），退回到当前选中项
+        var target = FindAncestorRow(src)?.DataContext as ServerAssetViewModel
+                     ?? GridAssets.SelectedItem as ServerAssetViewModel;
+        if (target == null) return;
+
+        // 双击直接连接，不切换到会话工作台
+        ConnectServer(target, switchToWorkspace: false);
     }
 
     private void GridAssets_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -29,6 +29,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "İçe Aktar",
         ["Btn_ExportSelected"] = "Dışa Aktar",
         ["Btn_Delete"] = "Sil",
+        ["Btn_BatchTemplate"] = "Şablon ata",
         ["Btn_Open"] = "Bağlan",
         ["Btn_Connect"] = "Bağlan",
         ["Btn_ShowAll"] = "Tümünü Göster",

@@ -29,6 +29,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "インポート",
         ["Btn_ExportSelected"] = "選択項目をエクスポート",
         ["Btn_Delete"] = "一括削除",
+        ["Btn_BatchTemplate"] = "テンプレート一括設定",
         ["Btn_Open"] = "接続",
         ["Btn_Connect"] = "接続",
         ["Btn_ShowAll"] = "すべて表示",

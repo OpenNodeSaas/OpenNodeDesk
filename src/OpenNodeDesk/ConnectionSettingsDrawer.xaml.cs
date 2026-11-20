@@ -85,7 +85,7 @@ public partial class ConnectionSettingsDrawer : UserControl
         _templates = new ObservableCollection<ConnectionTemplate>(templates);
         
         // 构建显示列表：首项为"（无模板）"，后续为模板摘要
-        var displayItems = new List<string> { "（无模板）" };
+        var displayItems = new List<string> { L10n["Fld_TemplateNone"] };
         displayItems.AddRange(_templates.Select(t => t.GetDisplaySummary()));
         
         CmbTemplates.ItemsSource = displayItems;
@@ -210,6 +210,8 @@ public partial class ConnectionSettingsDrawer : UserControl
         }
 
         Visibility = Visibility.Visible;
+        // 从「模板管理」打开过抽屉会把模板下拉隐藏，从资产打开时必须恢复，否则看不到当前绑定模板
+        CmbTemplates.Visibility = Visibility.Visible;
         UpdateEffectiveParamsPreview();
     }
 

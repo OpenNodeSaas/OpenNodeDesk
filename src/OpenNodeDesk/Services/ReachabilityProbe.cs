@@ -6,6 +6,9 @@ namespace OpenNodeDesk.Services;
 
 public sealed class ReachabilityProbe
 {
+    /// <summary>周期探测的最小间隔（分钟）：过于频繁会被目标网络拉黑。</summary>
+    public const int MinIntervalMinutes = 5;
+
     private Timer? _probeTimer;
     private readonly SemaphoreSlim _batchSemaphore;
     public event EventHandler<List<ServerAsset>>? ProbeCompleted;
@@ -81,7 +84,7 @@ public sealed class ReachabilityProbe
     {
         StopPeriodicProbe();
 
-        if (intervalMinutes < 1)
+        if (intervalMinutes < MinIntervalMinutes)
         {
             return;
         }
@@ -142,7 +145,7 @@ public sealed class ReachabilityProbe
             {
                 // Suppress background exceptions
             }
-        }, null, TimeSpan.Zero, intervalTimeSpan);
+        }, null, intervalTimeSpan, intervalTimeSpan);
     }
 
     public void StopPeriodicProbe()

@@ -33,6 +33,9 @@ public sealed record AssetStoreData
     public List<string> AssetListColumnOrder { get; init; } = [];
     public double AssetListFontSize { get; init; } = 14;
 
+    // 列 key → 用户拖拽后的列宽（像素），用于下次启动还原
+    public Dictionary<string, double> AssetListColumnWidths { get; init; } = [];
+
     // SSH 相关本地偏好：是否以独立窗口打开 SSH 会话、终端默认字号、终端配色方案档位
     public bool SshStandaloneWindow { get; init; }
     public double SshTerminalFontSize { get; init; } = 13;
@@ -155,6 +158,27 @@ public sealed class AssetStore
                 return result;
             }
 
+            // 列宽：丢弃非法 key 与超出合理范围的宽度，避免异常值把列撑坏
+            static Dictionary<string, double> SanitizeColumnWidths(Dictionary<string, double>? widths, HashSet<string> whitelist)
+            {
+                var result = new Dictionary<string, double>(StringComparer.Ordinal);
+                if (widths == null)
+                {
+                    return result;
+                }
+
+                foreach (var (key, value) in widths)
+                {
+                    if (string.IsNullOrEmpty(key) || !whitelist.Contains(key))
+                        continue;
+                    if (double.IsNaN(value) || double.IsInfinity(value) || value < 20 || value > 2000)
+                        continue;
+                    result[key] = Math.Round(value);
+                }
+
+                return result;
+            }
+
             return new AssetStoreData
             {
                 Version = data.Version > 0 ? data.Version : 1,
@@ -169,6 +193,7 @@ public sealed class AssetStore
                 VncArgumentTemplate = data.VncArgumentTemplate ?? "",
                 AssetListHiddenColumns = SanitizeColumns(data.AssetListHiddenColumns, validColumnKeys),
                 AssetListColumnOrder = SanitizeColumns(data.AssetListColumnOrder, validColumnKeys),
+                AssetListColumnWidths = SanitizeColumnWidths(data.AssetListColumnWidths, validColumnKeys),
                 AssetListFontSize = (data.AssetListFontSize >= 10 && data.AssetListFontSize <= 24) ? data.AssetListFontSize : 14,
                 SshStandaloneWindow = data.SshStandaloneWindow,
                 SshTerminalFontSize = (data.SshTerminalFontSize >= 9 && data.SshTerminalFontSize <= 28) ? data.SshTerminalFontSize : 13,

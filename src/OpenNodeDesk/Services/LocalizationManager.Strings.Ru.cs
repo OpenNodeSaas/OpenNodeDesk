@@ -28,6 +28,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "Импорт",
         ["Btn_ExportSelected"] = "Экспорт",
         ["Btn_Delete"] = "Удалить",
+        ["Btn_BatchTemplate"] = "Назначить шаблон",
         ["Btn_Open"] = "Подключить",
         ["Btn_Connect"] = "Подключить",
         ["Btn_ShowAll"] = "Показать все",

@@ -29,6 +29,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "Importieren",
         ["Btn_ExportSelected"] = "Auswahl exportieren",
         ["Btn_Delete"] = "Löschen",
+        ["Btn_BatchTemplate"] = "Vorlage zuweisen",
         ["Btn_Open"] = "Verbinden",
         ["Btn_Connect"] = "Verbinden",
         ["Btn_ShowAll"] = "Alle anzeigen",

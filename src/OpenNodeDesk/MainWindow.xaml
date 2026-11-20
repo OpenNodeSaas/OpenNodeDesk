@@ -84,7 +84,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- 左侧紧凑导航栏 -->
-        <Border x:Name="BorderLeftNav" Grid.Column="0" Background="{DynamicResource SidebarBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" MouseEnter="BorderLeftNav_MouseEnter" MouseLeave="BorderLeftNav_MouseLeave">
+        <Border x:Name="BorderLeftNav" Grid.Column="0" Background="{DynamicResource SidebarBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="60"/>
@@ -223,6 +223,7 @@
                         <Button x:Name="BtnInvertSelect" Content="{DynamicResource {x:Static local:MainWindow.ResBtnInvertSelect}}" Style="{StaticResource ModernButtonStyle}" Margin="4,0" Click="BtnInvertSelect_Click"/>
                         <TextBlock x:Name="TxtSelectedCount" VerticalAlignment="Center" Margin="8,0" Foreground="{DynamicResource MutedForeground}"/>
                         <Button x:Name="BtnDelete" Content="{DynamicResource {x:Static local:MainWindow.ResBtnDelete}}" Style="{StaticResource ModernButtonStyle}" Margin="4,0" Click="BtnDelete_Click"/>
+                        <Button x:Name="BtnBatchTemplate" Content="{DynamicResource {x:Static local:MainWindow.ResBtnBatchTemplate}}" Style="{StaticResource ModernButtonStyle}" Margin="4,0" Click="BtnBatchTemplate_Click"/>
                         <Button x:Name="BtnSyncCloud" Content="{DynamicResource {x:Static local:MainWindow.ResBtnSyncCloud}}" Style="{StaticResource ModernButtonStyle}" Margin="4,0" Click="BtnSyncCloud_Click"/>
                     </StackPanel>
                 </Grid>

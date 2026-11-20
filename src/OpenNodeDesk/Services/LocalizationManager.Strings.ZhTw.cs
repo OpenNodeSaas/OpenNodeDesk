@@ -28,6 +28,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "匯入",
         ["Btn_ExportSelected"] = "匯出所選",
         ["Btn_Delete"] = "批次刪除",
+        ["Btn_BatchTemplate"] = "批次套用範本",
         ["Btn_Open"] = "連線",
         ["Btn_Connect"] = "連線",
         ["Btn_ShowAll"] = "顯示全部",

@@ -31,6 +31,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "Importer",
         ["Btn_ExportSelected"] = "Exporter",
         ["Btn_Delete"] = "Supprimer",
+        ["Btn_BatchTemplate"] = "Attribuer un modèle",
         ["Btn_Open"] = "Connecter",
         ["Btn_Connect"] = "Connecter",
         ["Btn_ShowAll"] = "Tout afficher",

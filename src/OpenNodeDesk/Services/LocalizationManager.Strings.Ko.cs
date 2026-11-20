@@ -30,6 +30,7 @@ public partial class LocalizationManager
         ["Btn_Import"] = "가져오기",
         ["Btn_ExportSelected"] = "내보내기",
         ["Btn_Delete"] = "일괄 삭제",
+        ["Btn_BatchTemplate"] = "템플릿 일괄 설정",
         ["Btn_Open"] = "연결",
         ["Btn_Connect"] = "연결",
         ["Btn_ShowAll"] = "전체 표시",
