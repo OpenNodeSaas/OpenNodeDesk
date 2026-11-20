@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System.Windows;
 using OpenNodeDesk.Controls;
 using OpenNodeDesk.Models;
@@ -27,6 +28,7 @@ public partial class SshWindow : Window
         _host = new SshTerminalHost(asset, password, privateKeyPath, privateKeyPassphrase, jumpAsset, jumpPassword);
         RootGrid.Children.Add(_host);
 
-        Closed += (s, e) => _host.DisposeSession();
+        // 后台线程释放会话：SSH.NET 的 Disconnect 是同步网络操作，放 UI 线程会卡住主窗口（资产列表短暂无响应）
+        Closed += (s, e) => Task.Run(_host.DisposeSession);
     }
 }
