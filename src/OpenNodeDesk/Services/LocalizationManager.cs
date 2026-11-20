@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 
@@ -9,10 +10,24 @@ namespace OpenNodeDesk.Services;
 public enum AppLanguage
 {
     Zh,
-    En
+    ZhTw,
+    En,
+    Ja,
+    Ko,
+    De,
+    Fr,
+    Es,
+    Ru,
+    PtBr,
+    It,
+    Tr,
+    Vi
 }
 
-public class LocalizationManager : INotifyPropertyChanged
+/// <summary>一种可选界面语言：枚举值、写入配置的短标记、以及菜单里显示的母语名称。</summary>
+public sealed record LanguageOption(AppLanguage Language, string Tag, string NativeName);
+
+public partial class LocalizationManager : INotifyPropertyChanged
 {
     private static LocalizationManager? _instance;
     public static LocalizationManager Instance => _instance ??= new LocalizationManager();
@@ -26,6 +41,7 @@ public class LocalizationManager : INotifyPropertyChanged
             if (_currentLanguage != value)
             {
                 _currentLanguage = value;
+                _mergedCache = null;
                 ApplyLanguage(_currentLanguage);
                 OnPropertyChanged();
                 OnPropertyChanged("Item[]");
@@ -34,12 +50,107 @@ public class LocalizationManager : INotifyPropertyChanged
         }
     }
 
+    /// <summary>可选语言清单（顺序即菜单显示顺序）：母语名称 + 写入本地配置的短标记。</summary>
+    public static readonly IReadOnlyList<LanguageOption> SupportedLanguages =
+    [
+        new(AppLanguage.Zh, "zh-Hans", "简体中文"),
+        new(AppLanguage.ZhTw, "zh-Hant", "繁體中文"),
+        new(AppLanguage.En, "en", "English"),
+        new(AppLanguage.Ja, "ja", "日本語"),
+        new(AppLanguage.Ko, "ko", "한국어"),
+        new(AppLanguage.De, "de", "Deutsch"),
+        new(AppLanguage.Fr, "fr", "Français"),
+        new(AppLanguage.Es, "es", "Español"),
+        new(AppLanguage.Ru, "ru", "Русский"),
+        new(AppLanguage.PtBr, "pt-BR", "Português (Brasil)"),
+        new(AppLanguage.It, "it", "Italiano"),
+        new(AppLanguage.Tr, "tr", "Türkçe"),
+        new(AppLanguage.Vi, "vi", "Tiếng Việt")
+    ];
+
+    /// <summary>把配置里的短标记还原成语言；不认识或为空时回落到简体中文。</summary>
+    public static AppLanguage FromTag(string? tag)
+    {
+        foreach (var option in SupportedLanguages)
+        {
+            if (string.Equals(option.Tag, tag, StringComparison.OrdinalIgnoreCase))
+            {
+                return option.Language;
+            }
+        }
+
+        return AppLanguage.Zh;
+    }
+
+    public static string TagOf(AppLanguage language) =>
+        SupportedLanguages.FirstOrDefault(o => o.Language == language)?.Tag ?? "zh-Hans";
+
+    public static string NativeNameOf(AppLanguage language) =>
+        SupportedLanguages.FirstOrDefault(o => o.Language == language)?.NativeName ?? "简体中文";
+
+    /// <summary>
+    /// 各语言字典的登记表。延迟构建，确保所有 partial 文件里的静态字典都已初始化。
+    /// </summary>
+    private static Dictionary<AppLanguage, Dictionary<string, string>>? _allStrings;
+    private static Dictionary<AppLanguage, Dictionary<string, string>> AllStrings => _allStrings ??= new()
+    {
+        [AppLanguage.Zh] = _zhStrings,
+        [AppLanguage.ZhTw] = _zhTwStrings,
+        [AppLanguage.En] = _enStrings,
+        [AppLanguage.Ja] = _jaStrings,
+        [AppLanguage.Ko] = _koStrings,
+        [AppLanguage.De] = _deStrings,
+        [AppLanguage.Fr] = _frStrings,
+        [AppLanguage.Es] = _esStrings,
+        [AppLanguage.Ru] = _ruStrings,
+        [AppLanguage.PtBr] = _ptBrStrings,
+        [AppLanguage.It] = _itStrings,
+        [AppLanguage.Tr] = _trStrings,
+        [AppLanguage.Vi] = _viStrings
+    };
+
+    /// <summary>当前语言字典；未登记时回落简体中文。</summary>
+    private Dictionary<string, string> StringsFor(AppLanguage language) =>
+        AllStrings.TryGetValue(language, out var dict) ? dict : _zhStrings;
+
+    /// <summary>
+    /// 合并字典：简体中文打底 → 英文覆盖 → 当前语言覆盖。
+    /// 这样某个语言漏译的键会自动显示英文（再退回中文），不会在界面上留空。
+    /// 结果按语言缓存，切换语言时失效重建。
+    /// </summary>
+    private Dictionary<string, string>? _mergedCache;
+
+    private Dictionary<string, string> MergedStrings()
+    {
+        if (_mergedCache != null)
+        {
+            return _mergedCache;
+        }
+
+        var merged = new Dictionary<string, string>(_zhStrings);
+        foreach (var (k, v) in _enStrings)
+        {
+            merged[k] = v;
+        }
+
+        foreach (var (k, v) in StringsFor(_currentLanguage))
+        {
+            merged[k] = v;
+        }
+
+        return _mergedCache = merged;
+    }
+
     public string this[string key]
     {
         get
         {
-            var dict = _currentLanguage == AppLanguage.En ? _enStrings : _zhStrings;
-            return dict.TryGetValue(key, out var val) ? val : key;
+            if (string.IsNullOrEmpty(key))
+            {
+                return key;
+            }
+
+            return MergedStrings().TryGetValue(key, out var val) ? val : key;
         }
     }
 
@@ -52,12 +163,10 @@ public class LocalizationManager : INotifyPropertyChanged
 
     public void Initialize(AppLanguage defaultLanguage = AppLanguage.Zh)
     {
+        // Initialize 可能被同语言重复调用，这里直接落值，避免 CurrentLanguage 的变更判断吞掉首次应用
+        _currentLanguage = defaultLanguage;
+        _mergedCache = null;
         ApplyLanguage(defaultLanguage);
-    }
-
-    public void ToggleLanguage()
-    {
-        CurrentLanguage = CurrentLanguage == AppLanguage.Zh ? AppLanguage.En : AppLanguage.Zh;
     }
 
     public void SetLanguage(AppLanguage language)
@@ -84,19 +193,16 @@ public class LocalizationManager : INotifyPropertyChanged
         var app = Application.Current;
         if (app == null) return;
 
-        var other = language == AppLanguage.En ? _zhStrings : _enStrings;
-        var strings = language == AppLanguage.En ? _enStrings : _zhStrings;
-
-        // 先清掉另一语言的遗留键，避免键缺失时残留旧语种文案
-        foreach (var k in other.Keys)
+        // 先把所有语言的键全部清掉，避免切换后残留其他语种文案
+        foreach (var dict in AllStrings.Values)
         {
-            if (!strings.ContainsKey(k))
+            foreach (var k in dict.Keys)
             {
                 app.Resources.Remove(k);
             }
         }
 
-        foreach (var (k, v) in strings)
+        foreach (var (k, v) in MergedStrings())
         {
             app.Resources[k] = v;
         }
@@ -271,7 +377,7 @@ public class LocalizationManager : INotifyPropertyChanged
         ["Settings_Theme"] = "外观主题",
         ["Settings_ThemeHint"] = "亮色 / 暗色即时切换，所有窗口同步生效。",
         ["Settings_Language"] = "界面语言",
-        ["Settings_LanguageHint"] = "简体中文 / English 即时切换。",
+        ["Settings_LanguageHint"] = "13 种界面语言，选择后立即生效并记住。",
         ["Settings_Probe"] = "定时可达性探测",
         ["Settings_ProbeHint"] = "设置大于 0 的分钟数后，程序会在后台定时探测所有资产可达性。",
         ["Settings_Data"] = "本地数据",
@@ -400,7 +506,7 @@ public class LocalizationManager : INotifyPropertyChanged
         // 主窗口补充键
         ["App_Title"] = "OpenNodeDesk 远程运维管理中心",
         ["Theme_Toggle"] = "🌓 主题",
-        ["Lang_Toggle"] = "中 / EN",
+        ["Lang_Toggle"] = "界面语言",
         ["Btn_ExpiryBanner"] = "⚠️ 临期资产提示",
         ["Tip_Favorite"] = "收藏 / 取消收藏",
         ["Tip_MaximizeRestore"] = "最大化/还原 (双击标题栏也可切换)",
@@ -841,7 +947,7 @@ public class LocalizationManager : INotifyPropertyChanged
         ["Settings_Theme"] = "Appearance",
         ["Settings_ThemeHint"] = "Switch light / dark instantly across all windows.",
         ["Settings_Language"] = "Language",
-        ["Settings_LanguageHint"] = "Switch between Simplified Chinese and English instantly.",
+        ["Settings_LanguageHint"] = "13 interface languages; switching applies instantly and is remembered.",
         ["Settings_Probe"] = "Scheduled Reachability Probe",
         ["Settings_ProbeHint"] = "Set minutes greater than 0 to probe all assets periodically in background.",
         ["Settings_Data"] = "Local Data",
@@ -970,7 +1076,7 @@ public class LocalizationManager : INotifyPropertyChanged
         // Main window extras
         ["App_Title"] = "OpenNodeDesk RemoteOps Console",
         ["Theme_Toggle"] = "🌓 Theme",
-        ["Lang_Toggle"] = "中 / EN",
+        ["Lang_Toggle"] = "Interface language",
         ["Btn_ExpiryBanner"] = "⚠️ Expiring Assets",
         ["Tip_Favorite"] = "Favorite / Unfavorite",
         ["Tip_MaximizeRestore"] = "Maximize/Restore (double-click the title bar)",

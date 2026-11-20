@@ -427,6 +427,9 @@ public partial class MainWindow : Window
             ConnectServer(picker.SelectedAsset);
         };
 
+        // 设置页里切换界面语言：立即应用并落盘
+        SettingsView.LanguageSelectionChanged += ApplyLanguage;
+
         // 设置页保存：VNC 客户端 + SSH 终端外观 + 保护口令，写入内存后同步到工作台/新会话并落盘
         SettingsView.Saved += () =>
         {
@@ -577,7 +580,37 @@ public partial class MainWindow : Window
     }
 
     private void BtnToggleTheme_Click(object sender, RoutedEventArgs e) => ThemeManager.Instance.ToggleTheme();
-    private void BtnToggleLang_Click(object sender, RoutedEventArgs e) => LocalizationManager.Instance.ToggleLanguage();
+
+    /// <summary>语言入口：弹出全部界面语言，当前项打勾；选择后立即生效并记忆。</summary>
+    private void BtnToggleLang_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = BtnToggleLang, Placement = PlacementMode.Top };
+        foreach (var option in LocalizationManager.SupportedLanguages)
+        {
+            var item = new MenuItem
+            {
+                Header = option.NativeName,
+                IsCheckable = true,
+                IsChecked = option.Language == L10n.CurrentLanguage
+            };
+            var language = option.Language;
+            item.Click += (_, _) => ApplyLanguage(language);
+            menu.Items.Add(item);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>应用界面语言并写入本地配置，下次启动沿用。</summary>
+    private void ApplyLanguage(AppLanguage language)
+    {
+        if (language != L10n.CurrentLanguage)
+        {
+            L10n.SetLanguage(language);
+        }
+
+        _assetStore.Save(_assetStore.Load() with { Language = LocalizationManager.TagOf(language) });
+    }
 
     /// <summary>展开或收起右侧详情面板（顶栏按钮与面板内的收起按钮共用）。</summary>
     private void BtnToggleDetails_Click(object sender, RoutedEventArgs e)

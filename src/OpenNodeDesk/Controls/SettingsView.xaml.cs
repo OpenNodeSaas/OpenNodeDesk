@@ -31,6 +31,9 @@ public partial class SettingsView : UserControl
     /// <summary>用户点击「立即锁定」并校验通过后触发，由主窗口执行锁定。</summary>
     public event Action? LockRequested;
 
+    /// <summary>用户在本页切换界面语言时触发，由主窗口应用并落盘。</summary>
+    public event Action<AppLanguage>? LanguageSelectionChanged;
+
     /// <summary>当前 Saved 事件是否由「立即锁定」触发（用于跳过"设置已保存"弹窗）。</summary>
     public bool IsLockPending { get; private set; }
 
@@ -51,6 +54,7 @@ public partial class SettingsView : UserControl
 
     private bool _hasExistingPassword;
     private bool _loading;
+    private bool _syncingLanguage;
 
     public SettingsView()
     {
@@ -93,6 +97,9 @@ public partial class SettingsView : UserControl
     private void ApplyStaticTexts()
     {
         TxtSubtitle.Text = L10n["Settings_Subtitle"];
+        TxtLanguageSection.Text = L10n["Settings_Language"];
+        TxtLanguageHint.Text = L10n["Settings_LanguageHint"];
+        RebuildLanguageItems();
         TxtVncSection.Text = L10n["Settings_VncSection"];
         TxtSshSection.Text = L10n["Settings_SshSection"];
         TxtViewerLabel.Text = L10n["Help_ViewerLabel"];
@@ -118,6 +125,35 @@ public partial class SettingsView : UserControl
         TxtProtectionRisk.Text = L10n["Settings_ProtectionRisk"];
         BtnLockNow.Content = L10n[ResProtectionLockNow];
         RebuildProtectionIdleItems();
+    }
+
+    /// <summary>按当前语言重建界面语言下拉项（显示各语言母语名称），并选中当前项。</summary>
+    private void RebuildLanguageItems()
+    {
+        if (CmbLanguage is null) return;
+
+        _syncingLanguage = true;
+        CmbLanguage.Items.Clear();
+        ComboBoxItem? selected = null;
+        foreach (var option in LocalizationManager.SupportedLanguages)
+        {
+            var item = new ComboBoxItem { Content = option.NativeName, Tag = option.Language };
+            CmbLanguage.Items.Add(item);
+            if (option.Language == L10n.CurrentLanguage) selected = item;
+        }
+
+        CmbLanguage.SelectedItem = selected;
+        _syncingLanguage = false;
+    }
+
+    private void CmbLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // 重建列表时的程序化选中不当作业务选择，避免与主窗口来回触发
+        if (_syncingLanguage) return;
+        if ((CmbLanguage.SelectedItem as ComboBoxItem)?.Tag is AppLanguage language)
+        {
+            LanguageSelectionChanged?.Invoke(language);
+        }
     }
 
     /// <summary>按当前语言重建空闲锁定时长下拉项，并尽量保留原选中分钟数。</summary>

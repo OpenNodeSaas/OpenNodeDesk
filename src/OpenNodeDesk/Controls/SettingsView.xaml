@@ -8,6 +8,15 @@
             <TextBlock Text="{DynamicResource {x:Static local:SettingsView.ResTitle}}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource AppForeground}" Margin="0,0,0,4"/>
             <TextBlock x:Name="TxtSubtitle" FontSize="12" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,18"/>
 
+            <!-- 界面语言 -->
+            <Border Background="{DynamicResource SidebarBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,18">
+                <StackPanel>
+                    <TextBlock x:Name="TxtLanguageSection" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource Primary}" Margin="0,0,0,10"/>
+                    <ComboBox x:Name="CmbLanguage" MinWidth="200" HorizontalAlignment="Left" SelectionChanged="CmbLanguage_SelectionChanged"/>
+                    <TextBlock x:Name="TxtLanguageHint" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedForeground}" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
+
             <!-- VNC 客户端配置（外装客户端路径与启动参数） -->
             <Border Background="{DynamicResource SidebarBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,18">
                 <StackPanel>

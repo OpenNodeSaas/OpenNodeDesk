@@ -39,7 +39,8 @@ public partial class App : Application
 
         base.OnStartup(e);
         ThemeManager.Instance.Initialize();
-        LocalizationManager.Instance.Initialize();
+        // 界面语言沿用上次选择；配置文件缺失或标记未知时回落到简体中文
+        LocalizationManager.Instance.Initialize(LocalizationManager.FromTag(new AssetStore().Load().Language));
 
         // 首个实例监听"再次启动"信号，收到后激活自己的主窗口
         _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
